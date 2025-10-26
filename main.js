@@ -50,7 +50,7 @@ function init() {
       model.scale.set(4, 4, 4);
       scene.add(model);
 
-      keychainController = model.getObjectByName("Keychain Controler") || model;
+      keychainControler = model.getObjectByName("Keychain Controler") || model;
 
       model.traverse((child) => {
         if (child.isMesh) {
