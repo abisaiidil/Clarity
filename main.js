@@ -54,10 +54,7 @@ function init() {
       const model = gltf.scene;
       model.scale.set(4, 4, 4);
 
-      keychainController =
-  model.getObjectByName("Keychain Controler") || // nama yang benar dari Blender-mu
-  model.getObjectByName("Keychain Controller") || // fallback kalau nanti kamu rename di Blender
-  model;
+      keychainController = model.getObjectByName("Keychain Controller") || model;
       planeBackground = model.getObjectByName("Clarity Web Hero");
 
       model.traverse((child) => {
