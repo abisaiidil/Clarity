@@ -6,6 +6,7 @@ let sceneMain, sceneEnv, camera, renderer;
 let cubeCam, cubeTarget;
 let keychainController;
 let glassMeshes = [];
+let dirLight, ambLight;
 let gui;
 
 const cursor = { x: 0, y: 0 };
@@ -17,10 +18,11 @@ const lerpSpeed = 0.05;
 function init() {
   const canvas = document.getElementById("webgl");
 
+  // --- SCENE SETUP ---
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
 
-  sceneEnv = new THREE.Scene(); // untuk cubeCamera capture
+  sceneEnv = new THREE.Scene(); // untuk refraction env capture
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
@@ -29,13 +31,15 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  const ambLight = new THREE.AmbientLight(0xffffff, 1.5);
-  const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+  // --- LIGHTING ---
+  ambLight = new THREE.AmbientLight(0xffffff, 1.5);
+  dirLight = new THREE.DirectionalLight(0xffffff, 3);
   dirLight.position.set(5, 5, 5);
+
   sceneMain.add(ambLight, dirLight);
   sceneEnv.add(ambLight.clone(), dirLight.clone());
 
-  // CubeCamera for refraction
+  // --- CUBECAMERA (refraction) ---
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -44,21 +48,39 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   sceneEnv.add(cubeCam);
 
+  // --- LOADERS ---
   const loader = new GLTFLoader();
 
-  // 1️⃣ Load Background (static)
+  // 1️⃣ Load background plane
   loader.load(
     "./asset/clarity_bg.glb",
     (gltf) => {
       const bg = gltf.scene;
-      sceneEnv.add(bg);
-      console.log("✅ clarity_bg.glb dimuat (background diam)");
+      bg.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false,
+          });
+        }
+      });
+
+      const bgForEnv = bg.clone();
+      const bgForMain = bg.clone();
+
+      bgForEnv.position.z = -0.5;
+      bgForMain.position.z = -0.5;
+
+      sceneEnv.add(bgForEnv);
+      sceneMain.add(bgForMain);
+
+      console.log("✅ clarity_bg.glb dimuat di sceneEnv & sceneMain");
     },
     undefined,
     (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
   );
 
-  // 2️⃣ Load Keychain (interactive)
+  // 2️⃣ Load keychain
   loader.load(
     "./asset/clarity_keychain.glb",
     (gltf) => {
@@ -67,8 +89,8 @@ function init() {
       sceneMain.add(model);
 
       keychainController =
-        model.getObjectByName("Keychain Controler") || // nama dari Blender kamu
-        model.getObjectByName("Keychain Controller") || // fallback
+        model.getObjectByName("Keychain Controler") ||
+        model.getObjectByName("Keychain Controller") ||
         model;
 
       model.traverse((child) => {
@@ -113,6 +135,7 @@ function init() {
     (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
   );
 
+  // --- INTERAKSI ---
   window.addEventListener("mousemove", (e) => {
     cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
     cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
@@ -121,26 +144,58 @@ function init() {
   window.addEventListener("resize", onResize);
 }
 
+// --- GUI SETUP ---
 function setupGUI() {
   gui = new GUI();
-  const folder = gui.addFolder("Glass Material");
-  const mat = glassMeshes[0];
 
-  folder.add(mat, "transmission", 0, 1, 0.01);
-  folder.add(mat, "ior", 1.0, 2.0, 0.01);
-  folder.add(mat, "thickness", 0.1, 5, 0.1);
-  folder.add(mat, "roughness", 0, 1, 0.01);
-  folder.add(mat, "metalness", 0, 1, 0.01);
-  folder.add(mat, "envMapIntensity", 0, 3, 0.1);
-  folder.open();
+  // 🎛️ Glass material controls
+  const mat = glassMeshes[0];
+  const glassFolder = gui.addFolder("Glass Material");
+  glassFolder.add(mat, "transmission", 0, 1, 0.01);
+  glassFolder.add(mat, "ior", 1.0, 2.0, 0.01);
+  glassFolder.add(mat, "thickness", 0.1, 5, 0.1);
+  glassFolder.add(mat, "roughness", 0, 1, 0.01);
+  glassFolder.add(mat, "metalness", 0, 1, 0.01);
+  glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
+  glassFolder.open();
+
+  // 💡 Lighting controls
+  const lightFolder = gui.addFolder("Lighting Controls");
+
+  // Ambient light
+  lightFolder.add(ambLight, "intensity", 0, 5, 0.1).name("Ambient Intensity");
+
+  // Directional light intensity & color
+  lightFolder.add(dirLight, "intensity", 0, 10, 0.1).name("Directional Intensity");
+  lightFolder.addColor({ color: "#ffffff" }, "color").name("Light Color").onChange((val) => {
+    dirLight.color.set(val);
+  });
+
+  // Position controls
+  lightFolder.add(dirLight.position, "x", -10, 10, 0.1).name("Light X");
+  lightFolder.add(dirLight.position, "y", -10, 10, 0.1).name("Light Y");
+  lightFolder.add(dirLight.position, "z", -10, 10, 0.1).name("Light Z");
+
+  // Shadow softness / distance
+  lightFolder.add(dirLight, "distance", 0, 50, 0.5).name("Light Distance");
+
+  // Size (for area light feel, not real size)
+  const lightSize = { size: 1.0 };
+  lightFolder.add(lightSize, "size", 0.1, 5, 0.1).name("Size (visual)").onChange((val) => {
+    dirLight.scale.set(val, val, val);
+  });
+
+  lightFolder.open();
 }
 
+// --- RESIZE HANDLER ---
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// --- ANIMATION LOOP ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -156,7 +211,7 @@ function animate() {
     keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
     keychainController.visible = false;
-    cubeCam.update(renderer, sceneEnv); // hanya tangkap background
+    cubeCam.update(renderer, sceneEnv); // capture env with bg
     keychainController.visible = true;
   }
 
