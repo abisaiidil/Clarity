@@ -3,16 +3,21 @@ import { GLTFLoader } from "GLTFLoader";
 import GUI from "lil-gui";
 
 let scene, camera, renderer;
-let keychainController, cubeCam, cubeTarget;
+let cubeCam, cubeTarget;
+let keychainController;
+let glassMeshes = [];
 let gui;
 
 const cursor = { x: 0, y: 0 };
-const rotationLerp = 0.05;
 let idleRotation = 0;
+const rotationSpeed = 0.01;
+const moveStrength = 0.5;
+const lerpSpeed = 0.05;
 
 function init() {
   const canvas = document.getElementById("webgl");
   scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xffffff);
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
@@ -21,11 +26,13 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  const ambLight = new THREE.AmbientLight(0xffffff, 1.2);
-  const dirLight = new THREE.DirectionalLight(0xffffff, 2);
-  dirLight.position.set(3, 5, 6);
+  // Lighting
+  const ambLight = new THREE.AmbientLight(0xffffff, 1.5);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+  dirLight.position.set(5, 5, 5);
   scene.add(ambLight, dirLight);
 
+  // CubeCamera for refraction
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -34,34 +41,45 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   scene.add(cubeCam);
 
+  // Load model
   const loader = new GLTFLoader();
   loader.load(
-    "./asset/clarity_keychain.glb",
+    "./asset/clarity.glb",
     (gltf) => {
       const model = gltf.scene;
-      model.scale.set(4, 4, 4); // scale dasar
+      model.scale.set(4, 4, 4);
       scene.add(model);
 
       keychainController = model.getObjectByName("Keychain Controller") || model;
-      keychainController.rotation.set(0, 0, 0); // rotasi awal
 
       model.traverse((child) => {
         if (child.isMesh) {
-          if (child.name.toLowerCase().includes("plastik")) {
-            child.material = new THREE.MeshPhysicalMaterial({
+          if (child.name.toLowerCase().includes("glass") || child.material?.name.toLowerCase().includes("glass")) {
+            const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
+              metalness: 0,
+              roughness: 0.05,
               transmission: 1,
               ior: 1.3,
-              thickness: 1.5,
-              roughness: 0,
-              metalness: 0,
+              thickness: 2,
               envMap: cubeTarget.texture,
+              envMapIntensity: 1.0,
+              clearcoat: 1,
+              clearcoatRoughness: 0.1,
             });
-          } else if (child.name.toLowerCase().includes("besi")) {
+            child.material = mat;
+            glassMeshes.push(mat);
+          } else if (child.name.toLowerCase().includes("metal")) {
             child.material = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               metalness: 1,
               roughness: 0.3,
+            });
+          } else if (child.name.toLowerCase().includes("clarity web hero")) {
+            // background plane stays fixed
+            child.material = new THREE.MeshBasicMaterial({
+              map: child.material.map || null,
+              toneMapped: false,
             });
           }
         }
@@ -84,24 +102,15 @@ function init() {
 
 function setupGUI() {
   gui = new GUI();
-  const folder = gui.addFolder("Keychain Transform");
+  const folder = gui.addFolder("Glass Material");
+  const mat = glassMeshes[0];
 
-  const pos = keychainController.position;
-  const rot = keychainController.rotation;
-  const scl = keychainController.scale;
-
-  folder.add(pos, "x", -2, 2, 0.01).name("Pos X");
-  folder.add(pos, "y", -2, 2, 0.01).name("Pos Y");
-  folder.add(pos, "z", -2, 2, 0.01).name("Pos Z");
-
-  folder.add(rot, "x", -Math.PI, Math.PI, 0.01).name("Rot X");
-  folder.add(rot, "y", -Math.PI, Math.PI, 0.01).name("Rot Y");
-  folder.add(rot, "z", -Math.PI, Math.PI, 0.01).name("Rot Z");
-
-  folder.add(scl, "x", 0.1, 20, 0.1).name("Scale X");
-  folder.add(scl, "y", 0.1, 20, 0.1).name("Scale Y");
-  folder.add(scl, "z", 0.1, 20, 0.1).name("Scale Z");
-
+  folder.add(mat, "transmission", 0, 1, 0.01);
+  folder.add(mat, "ior", 1.0, 2.0, 0.01);
+  folder.add(mat, "thickness", 0.1, 5, 0.1);
+  folder.add(mat, "roughness", 0, 1, 0.01);
+  folder.add(mat, "metalness", 0, 1, 0.01);
+  folder.add(mat, "envMapIntensity", 0, 3, 0.1);
   folder.open();
 }
 
@@ -115,14 +124,19 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (keychainController) {
-    idleRotation += 0.01; // rotasi idle 360 derajat
+    // idle rotation
+    idleRotation += rotationSpeed;
     keychainController.rotation.y = idleRotation;
+    keychainController.rotation.x = 1;
+    keychainController.rotation.z = 0.6;
 
-    // follow mouse smooth (overlay sedikit di atas idle spin)
-    keychainController.rotation.x += (cursor.y * 0.3 - keychainController.rotation.x) * rotationLerp;
-    keychainController.rotation.z += (cursor.x * 0.3 - keychainController.rotation.z) * rotationLerp;
+    // movement follow cursor
+    const targetX = cursor.x * moveStrength;
+    const targetY = cursor.y * moveStrength;
+    keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
+    keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
-    // refraksi realtime
+    // update refraction
     keychainController.visible = false;
     cubeCam.update(renderer, scene);
     keychainController.visible = true;
