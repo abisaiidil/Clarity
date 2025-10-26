@@ -2,20 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>3D Clarity Hero</title>
 
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
       overflow: hidden;
       background-color: #ffffff;
       height: 100vh;
       width: 100vw;
-      touch-action: none;
+      touch-action: none; /* biar touch drag tidak scroll halaman */
       font-family: system-ui, sans-serif;
     }
+
     #webgl {
       position: fixed;
       top: 0;
@@ -25,19 +30,17 @@
       display: block;
       z-index: 1;
     }
+
+    /* GUI positioning (biar ga nutupi scene di HP) */
     .lil-gui {
       z-index: 10 !important;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
     }
-    .lil-gui.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
+
     @media (max-width: 768px) {
       .lil-gui {
-        display: none !important; /* hide di smartphone */
+        transform: scale(0.9);
+        transform-origin: top right;
+        right: 0;
       }
     }
   </style>
@@ -50,7 +53,7 @@
     import * as THREE from "https://unpkg.com/three@0.165.0/build/three.module.js";
     import { GLTFLoader } from "https://unpkg.com/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
     import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm";
-    import "./main.js?v=5";
+    import "./main.js?v=4"; // versi baru biar cache browser ke-refresh
   </script>
 </body>
 </html>
