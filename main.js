@@ -5,6 +5,7 @@ import GUI from "lil-gui";
 let sceneMain, sceneEnv, camera, renderer;
 let cubeCam, cubeTarget;
 let keychainController;
+let bgMain, bgEnv;
 let glassMeshes = [];
 let dirLight, ambLight;
 let gui;
@@ -56,8 +57,23 @@ function init() {
   loader.load(
     "./asset/clarity_bg.glb",
     (gltf) => {
-      const bg = gltf.scene;
-      bg.traverse((child) => {
+      bgMain = gltf.scene;
+      bgEnv = bgMain.clone();
+
+      bgMain.position.z = -2;
+      bgEnv.position.z = -2;
+      bgMain.scale.set(3, 3, 3);
+      bgEnv.scale.set(3, 3, 3);
+
+      bgMain.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false,
+          });
+        }
+      });
+      bgEnv.traverse((child) => {
         if (child.isMesh) {
           child.material = new THREE.MeshBasicMaterial({
             map: child.material.map || null,
@@ -66,14 +82,8 @@ function init() {
         }
       });
 
-      const bgForEnv = bg.clone();
-      const bgForMain = bg.clone();
-
-      bgForEnv.position.z = -0.5;
-      bgForMain.position.z = -0.5;
-
-      sceneEnv.add(bgForEnv);
-      sceneMain.add(bgForMain);
+      sceneMain.add(bgMain);
+      sceneEnv.add(bgEnv);
 
       console.log("✅ clarity_bg.glb dimuat di sceneEnv & sceneMain");
     },
@@ -173,14 +183,36 @@ function setupGUI() {
   lightFolder.add(dirLight.position, "y", -10, 10, 0.1).name("Light Y");
   lightFolder.add(dirLight.position, "z", -10, 10, 0.1).name("Light Z");
 
-  // Simulasi ukuran (skala visual)
   const lightSize = { size: 1.0 };
   lightFolder
     .add(lightSize, "size", 0.1, 5, 0.1)
     .name("Size (visual)")
     .onChange((val) => dirLight.scale.set(val, val, val));
 
+  // 🪞 Background Controls
+  const bgFolder = gui.addFolder("Background Controls");
+  const bgParams = {
+    z: bgMain.position.z,
+    scale: bgMain.scale.x,
+  };
+
+  bgFolder.add(bgParams, "z", -5, 5, 0.1).name("Z Position").onChange((v) => {
+    if (bgMain && bgEnv) {
+      bgMain.position.z = v;
+      bgEnv.position.z = v;
+    }
+  });
+
+  bgFolder.add(bgParams, "scale", 0.5, 10, 0.1).name("Scale").onChange((v) => {
+    if (bgMain && bgEnv) {
+      bgMain.scale.set(v, v, v);
+      bgEnv.scale.set(v, v, v);
+    }
+  });
+
+  glassFolder.open();
   lightFolder.open();
+  bgFolder.open();
 }
 
 // --- RESIZE ---
