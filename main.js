@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
 import GUI from "lil-gui";
 
-let scene, camera, renderer;
+let sceneMain, sceneEnv, camera, renderer;
 let cubeCam, cubeTarget;
 let keychainController;
+let planeBackground;
 let glassMeshes = [];
 let gui;
 
@@ -16,8 +17,11 @@ const lerpSpeed = 0.05;
 
 function init() {
   const canvas = document.getElementById("webgl");
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
+
+  sceneMain = new THREE.Scene();
+  sceneMain.background = new THREE.Color(0xffffff);
+
+  sceneEnv = new THREE.Scene(); // scene untuk refraction capture
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
@@ -30,7 +34,8 @@ function init() {
   const ambLight = new THREE.AmbientLight(0xffffff, 1.5);
   const dirLight = new THREE.DirectionalLight(0xffffff, 3);
   dirLight.position.set(5, 5, 5);
-  scene.add(ambLight, dirLight);
+  sceneMain.add(ambLight, dirLight);
+  sceneEnv.add(ambLight.clone(), dirLight.clone());
 
   // CubeCamera for refraction
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
@@ -39,7 +44,7 @@ function init() {
     minFilter: THREE.LinearMipmapLinearFilter,
   });
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
-  scene.add(cubeCam);
+  sceneEnv.add(cubeCam);
 
   // Load model
   const loader = new GLTFLoader();
@@ -48,17 +53,22 @@ function init() {
     (gltf) => {
       const model = gltf.scene;
       model.scale.set(4, 4, 4);
-      scene.add(model);
 
-      keychainControler = model.getObjectByName("Keychain Controler") || model;
+      keychainController =
+  model.getObjectByName("Keychain Controler") || // nama yang benar dari Blender-mu
+  model.getObjectByName("Keychain Controller") || // fallback kalau nanti kamu rename di Blender
+  model;
+      planeBackground = model.getObjectByName("Clarity Web Hero");
 
       model.traverse((child) => {
         if (child.isMesh) {
-          if (child.name.toLowerCase().includes("plastik") || child.material?.name.toLowerCase().includes("plastik")) {
+          const name = child.name.toLowerCase();
+
+          if (name.includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
-              metalness: 0,
               roughness: 0.05,
+              metalness: 0,
               transmission: 1,
               ior: 1.3,
               thickness: 2,
@@ -69,23 +79,32 @@ function init() {
             });
             child.material = mat;
             glassMeshes.push(mat);
-          } else if (child.name.toLowerCase().includes("besi")) {
+          }
+
+          if (name.includes("besi")) {
             child.material = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               metalness: 1,
               roughness: 0.3,
             });
-          } else if (child.name.toLowerCase().includes("clarity web hero")) {
-            // background plane stays fixed
+          }
+
+          if (name.includes("clarity web hero")) {
             child.material = new THREE.MeshBasicMaterial({
               map: child.material.map || null,
               toneMapped: false,
             });
+            planeBackground = child;
           }
         }
       });
 
-      setupGUI();
+      // masukkan ke scene masing-masing
+      if (planeBackground) sceneEnv.add(planeBackground);
+      sceneMain.add(model);
+
+      if (glassMeshes.length > 0) setupGUI();
+
       animate();
     },
     undefined,
@@ -123,26 +142,26 @@ function onResize() {
 function animate() {
   requestAnimationFrame(animate);
 
-  if (keychainControler) {
+  if (keychainController) {
     // idle rotation
     idleRotation += rotationSpeed;
-    keychainControler.rotation.y = idleRotation;
-    keychainControler.rotation.x = 1;
-    keychainControler.rotation.z = 0.6;
+    keychainController.rotation.y = idleRotation;
+    keychainController.rotation.x = 1;
+    keychainController.rotation.z = 0.6;
 
-    // movement follow cursor
+    // follow cursor movement
     const targetX = cursor.x * moveStrength;
     const targetY = cursor.y * moveStrength;
-    keychainControler.position.x += (targetX - keychainControler.position.x) * lerpSpeed;
-    keychainControler.position.y += (targetY - keychainControler.position.y) * lerpSpeed;
+    keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
+    keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
-    // update refraction
-    keychainControler.visible = false;
-    cubeCam.update(renderer, scene);
-    keychainControler.visible = true;
+    // update cubeCamera environment
+    keychainController.visible = false;
+    cubeCam.update(renderer, sceneEnv); // hanya tangkap sceneEnv (plane)
+    keychainController.visible = true;
   }
 
-  renderer.render(scene, camera);
+  renderer.render(sceneMain, camera);
 }
 
 init();
