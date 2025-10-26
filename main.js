@@ -43,7 +43,7 @@ function init() {
       scene.add(model);
 
       keychainController = model.getObjectByName("Keychain Controller") || model;
-      keychainController.rotation.set(1, 0, 0.6); // rotasi awal
+      keychainController.rotation.set(0, 0, 0); // rotasi awal
 
       model.traverse((child) => {
         if (child.isMesh) {
