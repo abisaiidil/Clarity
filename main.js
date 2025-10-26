@@ -5,7 +5,6 @@ import GUI from "lil-gui";
 let sceneMain, sceneEnv, camera, renderer;
 let cubeCam, cubeTarget;
 let keychainController;
-let planeBackground;
 let glassMeshes = [];
 let gui;
 
@@ -21,7 +20,7 @@ function init() {
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
 
-  sceneEnv = new THREE.Scene(); // scene untuk refraction capture
+  sceneEnv = new THREE.Scene(); // untuk cubeCamera capture
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
@@ -30,7 +29,6 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // Lighting
   const ambLight = new THREE.AmbientLight(0xffffff, 1.5);
   const dirLight = new THREE.DirectionalLight(0xffffff, 3);
   dirLight.position.set(5, 5, 5);
@@ -46,21 +44,38 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   sceneEnv.add(cubeCam);
 
-  // Load model
   const loader = new GLTFLoader();
+
+  // 1️⃣ Load Background (static)
   loader.load(
-    "./asset/clarity.glb",
+    "./asset/clarity_bg.glb",
+    (gltf) => {
+      const bg = gltf.scene;
+      sceneEnv.add(bg);
+      console.log("✅ clarity_bg.glb dimuat (background diam)");
+    },
+    undefined,
+    (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
+  );
+
+  // 2️⃣ Load Keychain (interactive)
+  loader.load(
+    "./asset/clarity_keychain.glb",
     (gltf) => {
       const model = gltf.scene;
       model.scale.set(4, 4, 4);
+      sceneMain.add(model);
 
-      keychainController = model.getObjectByName("Keychain Controller") || model;
-      planeBackground = model.getObjectByName("Clarity Web Hero");
+      keychainController =
+        model.getObjectByName("Keychain Controler") || // nama dari Blender kamu
+        model.getObjectByName("Keychain Controller") || // fallback
+        model;
 
       model.traverse((child) => {
         if (child.isMesh) {
           const name = child.name.toLowerCase();
 
+          // plastik (glass)
           if (name.includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
@@ -78,6 +93,7 @@ function init() {
             glassMeshes.push(mat);
           }
 
+          // besi
           if (name.includes("besi")) {
             child.material = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
@@ -85,27 +101,16 @@ function init() {
               roughness: 0.3,
             });
           }
-
-          if (name.includes("clarity web hero")) {
-            child.material = new THREE.MeshBasicMaterial({
-              map: child.material.map || null,
-              toneMapped: false,
-            });
-            planeBackground = child;
-          }
         }
       });
-
-      // masukkan ke scene masing-masing
-      if (planeBackground) sceneEnv.add(planeBackground);
-      sceneMain.add(model);
 
       if (glassMeshes.length > 0) setupGUI();
 
       animate();
+      console.log("✅ clarity_keychain.glb dimuat (objek utama)");
     },
     undefined,
-    (err) => console.error("❌ Failed to load GLB:", err)
+    (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
   );
 
   window.addEventListener("mousemove", (e) => {
@@ -140,21 +145,18 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (keychainController) {
-    // idle rotation
     idleRotation += rotationSpeed;
     keychainController.rotation.y = idleRotation;
     keychainController.rotation.x = 1;
     keychainController.rotation.z = 0.6;
 
-    // follow cursor movement
     const targetX = cursor.x * moveStrength;
     const targetY = cursor.y * moveStrength;
     keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
     keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
-    // update cubeCamera environment
     keychainController.visible = false;
-    cubeCam.update(renderer, sceneEnv); // hanya tangkap sceneEnv (plane)
+    cubeCam.update(renderer, sceneEnv); // hanya tangkap background
     keychainController.visible = true;
   }
 
