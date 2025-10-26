@@ -1,59 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>3D Clarity Hero</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      overflow: hidden;
-      background-color: #ffffff;
-      height: 100vh;
-      width: 100vw;
-      touch-action: none; /* biar touch drag tidak scroll halaman */
-      font-family: system-ui, sans-serif;
-    }
-
-    #webgl {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: block;
-      z-index: 1;
-    }
-
-    /* GUI positioning (biar ga nutupi scene di HP) */
-    .lil-gui {
-      z-index: 10 !important;
-    }
-
-    @media (max-width: 768px) {
-      .lil-gui {
-        transform: scale(0.9);
-        transform-origin: top right;
-        right: 0;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clarity 3D Hero</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #ffffff;
       }
-    }
-  </style>
-</head>
+      #webgl {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="webgl"></canvas>
 
-<body>
-  <canvas id="webgl"></canvas>
-
-  <script type="module">
-    import * as THREE from "https://unpkg.com/three@0.165.0/build/three.module.js";
-    import { GLTFLoader } from "https://unpkg.com/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
-    import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm";
-    import "./main.js?v=4"; // versi baru biar cache browser ke-refresh
-  </script>
-</body>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.152.2/build/three.module.js",
+          "GLTFLoader": "https://unpkg.com/three@0.152.2/examples/jsm/loaders/GLTFLoader.js",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.18/+esm"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js?v=6"></script>
+  </body>
 </html>
