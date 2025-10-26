@@ -8,6 +8,7 @@ let gui;
 
 const cursor = { x: 0, y: 0 };
 const rotationLerp = 0.05;
+let idleRotation = 0;
 
 function init() {
   const canvas = document.getElementById("webgl");
@@ -38,11 +39,11 @@ function init() {
     "./asset/clarity_keychain.glb",
     (gltf) => {
       const model = gltf.scene;
-      model.scale.set(60, 60, 60);
+      model.scale.set(4, 4, 4); // scale dasar
       scene.add(model);
 
-      // Cari empty "Keychain Controller" di dalam file GLB
       keychainController = model.getObjectByName("Keychain Controller") || model;
+      keychainController.rotation.set(1, 0, 0.6); // rotasi awal
 
       model.traverse((child) => {
         if (child.isMesh) {
@@ -97,9 +98,9 @@ function setupGUI() {
   folder.add(rot, "y", -Math.PI, Math.PI, 0.01).name("Rot Y");
   folder.add(rot, "z", -Math.PI, Math.PI, 0.01).name("Rot Z");
 
-  folder.add(scl, "x", 0.1, 200, 0.1).name("Scale X");
-  folder.add(scl, "y", 0.1, 200, 0.1).name("Scale Y");
-  folder.add(scl, "z", 0.1, 200, 0.1).name("Scale Z");
+  folder.add(scl, "x", 0.1, 20, 0.1).name("Scale X");
+  folder.add(scl, "y", 0.1, 20, 0.1).name("Scale Y");
+  folder.add(scl, "z", 0.1, 20, 0.1).name("Scale Z");
 
   folder.open();
 }
@@ -114,13 +115,14 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (keychainController) {
-    // rotasi idle loop
-    keychainController.rotation.y += 0.003;
+    idleRotation += 0.01; // rotasi idle 360 derajat
+    keychainController.rotation.y = idleRotation;
 
-    // follow cursor smooth
-    keychainController.rotation.x += (cursor.y * 0.4 - keychainController.rotation.x) * rotationLerp;
-    keychainController.rotation.y += (cursor.x * 0.4 - keychainController.rotation.y) * rotationLerp;
+    // follow mouse smooth (overlay sedikit di atas idle spin)
+    keychainController.rotation.x += (cursor.y * 0.3 - keychainController.rotation.x) * rotationLerp;
+    keychainController.rotation.z += (cursor.x * 0.3 - keychainController.rotation.z) * rotationLerp;
 
+    // refraksi realtime
     keychainController.visible = false;
     cubeCam.update(renderer, scene);
     keychainController.visible = true;
