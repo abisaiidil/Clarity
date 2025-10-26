@@ -123,23 +123,23 @@ function onResize() {
 function animate() {
   requestAnimationFrame(animate);
 
-  if (keychainController) {
+  if (keychainControler) {
     // idle rotation
     idleRotation += rotationSpeed;
-    keychainController.rotation.y = idleRotation;
-    keychainController.rotation.x = 1;
-    keychainController.rotation.z = 0.6;
+    keychainControler.rotation.y = idleRotation;
+    keychainControler.rotation.x = 1;
+    keychainControler.rotation.z = 0.6;
 
     // movement follow cursor
     const targetX = cursor.x * moveStrength;
     const targetY = cursor.y * moveStrength;
-    keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
-    keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
+    keychainControler.position.x += (targetX - keychainControler.position.x) * lerpSpeed;
+    keychainControler.position.y += (targetY - keychainControler.position.y) * lerpSpeed;
 
     // update refraction
-    keychainController.visible = false;
+    keychainControler.visible = false;
     cubeCam.update(renderer, scene);
-    keychainController.visible = true;
+    keychainControler.visible = true;
   }
 
   renderer.render(scene, camera);
