@@ -54,7 +54,7 @@ function init() {
 
       model.traverse((child) => {
         if (child.isMesh) {
-          if (child.name.toLowerCase().includes("glass") || child.material?.name.toLowerCase().includes("glass")) {
+          if (child.name.toLowerCase().includes("plastik") || child.material?.name.toLowerCase().includes("Plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               metalness: 0,
@@ -69,7 +69,7 @@ function init() {
             });
             child.material = mat;
             glassMeshes.push(mat);
-          } else if (child.name.toLowerCase().includes("metal")) {
+          } else if (child.name.toLowerCase().includes("besi")) {
             child.material = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               metalness: 1,
