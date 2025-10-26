@@ -50,11 +50,11 @@ function init() {
       model.scale.set(4, 4, 4);
       scene.add(model);
 
-      keychainController = model.getObjectByName("Keychain Controller") || model;
+      keychainController = model.getObjectByName("Keychain Controler") || model;
 
       model.traverse((child) => {
         if (child.isMesh) {
-          if (child.name.toLowerCase().includes("plastik") || child.material?.name.toLowerCase().includes("Plastik")) {
+          if (child.name.toLowerCase().includes("plastik") || child.material?.name.toLowerCase().includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               metalness: 0,
