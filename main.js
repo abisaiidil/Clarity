@@ -22,7 +22,7 @@ function init() {
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
 
-  sceneEnv = new THREE.Scene(); // untuk refraction env capture
+  sceneEnv = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
@@ -35,11 +35,12 @@ function init() {
   ambLight = new THREE.AmbientLight(0xffffff, 1.5);
   dirLight = new THREE.DirectionalLight(0xffffff, 3);
   dirLight.position.set(5, 5, 5);
+  dirLight.castShadow = true;
 
   sceneMain.add(ambLight, dirLight);
   sceneEnv.add(ambLight.clone(), dirLight.clone());
 
-  // --- CUBECAMERA (refraction) ---
+  // --- CUBECAMERA ---
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -51,7 +52,7 @@ function init() {
   // --- LOADERS ---
   const loader = new GLTFLoader();
 
-  // 1️⃣ Load background plane
+  // 1️⃣ Background
   loader.load(
     "./asset/clarity_bg.glb",
     (gltf) => {
@@ -80,7 +81,7 @@ function init() {
     (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
   );
 
-  // 2️⃣ Load keychain
+  // 2️⃣ Keychain
   loader.load(
     "./asset/clarity_keychain.glb",
     (gltf) => {
@@ -97,7 +98,6 @@ function init() {
         if (child.isMesh) {
           const name = child.name.toLowerCase();
 
-          // plastik (glass)
           if (name.includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
@@ -115,7 +115,6 @@ function init() {
             glassMeshes.push(mat);
           }
 
-          // besi
           if (name.includes("besi")) {
             child.material = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
@@ -148,7 +147,7 @@ function init() {
 function setupGUI() {
   gui = new GUI();
 
-  // 🎛️ Glass material controls
+  // 🎛️ Glass
   const mat = glassMeshes[0];
   const glassFolder = gui.addFolder("Glass Material");
   glassFolder.add(mat, "transmission", 0, 1, 0.01);
@@ -159,43 +158,39 @@ function setupGUI() {
   glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
   glassFolder.open();
 
-  // 💡 Lighting controls
+  // 💡 Lighting
   const lightFolder = gui.addFolder("Lighting Controls");
-
-  // Ambient light
   lightFolder.add(ambLight, "intensity", 0, 5, 0.1).name("Ambient Intensity");
-
-  // Directional light intensity & color
   lightFolder.add(dirLight, "intensity", 0, 10, 0.1).name("Directional Intensity");
-  lightFolder.addColor({ color: "#ffffff" }, "color").name("Light Color").onChange((val) => {
-    dirLight.color.set(val);
-  });
 
-  // Position controls
+  const params = { color: "#ffffff" };
+  lightFolder
+    .addColor(params, "color")
+    .name("Light Color")
+    .onChange((v) => dirLight.color.set(v));
+
   lightFolder.add(dirLight.position, "x", -10, 10, 0.1).name("Light X");
   lightFolder.add(dirLight.position, "y", -10, 10, 0.1).name("Light Y");
   lightFolder.add(dirLight.position, "z", -10, 10, 0.1).name("Light Z");
 
-  // Shadow softness / distance
-  lightFolder.add(dirLight, "distance", 0, 50, 0.5).name("Light Distance");
-
-  // Size (for area light feel, not real size)
+  // Simulasi ukuran (skala visual)
   const lightSize = { size: 1.0 };
-  lightFolder.add(lightSize, "size", 0.1, 5, 0.1).name("Size (visual)").onChange((val) => {
-    dirLight.scale.set(val, val, val);
-  });
+  lightFolder
+    .add(lightSize, "size", 0.1, 5, 0.1)
+    .name("Size (visual)")
+    .onChange((val) => dirLight.scale.set(val, val, val));
 
   lightFolder.open();
 }
 
-// --- RESIZE HANDLER ---
+// --- RESIZE ---
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// --- ANIMATION LOOP ---
+// --- LOOP ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -211,7 +206,7 @@ function animate() {
     keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
     keychainController.visible = false;
-    cubeCam.update(renderer, sceneEnv); // capture env with bg
+    cubeCam.update(renderer, sceneEnv);
     keychainController.visible = true;
   }
 
