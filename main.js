@@ -7,7 +7,7 @@ let cubeCam, cubeTarget;
 let keychainController;
 let bgMain, bgEnv;
 let glassMeshes = [];
-let dirLight, ambLight;
+let keyLight, fillLight, rimLight, ambLight;
 let gui;
 
 const cursor = { x: 0, y: 0 };
@@ -33,13 +33,18 @@ function init() {
   renderer.setPixelRatio(window.devicePixelRatio);
 
   // --- LIGHTING ---
-  ambLight = new THREE.AmbientLight(0xffffff, 1.5);
-  dirLight = new THREE.DirectionalLight(0xffffff, 3);
-  dirLight.position.set(5, 5, 5);
-  dirLight.castShadow = true;
+  keyLight = new THREE.DirectionalLight(0xffffff, 4);
+  keyLight.position.set(3, 4, 5);
 
-  sceneMain.add(ambLight, dirLight);
-  sceneEnv.add(ambLight.clone(), dirLight.clone());
+  fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
+
+  rimLight = new THREE.DirectionalLight(0xffffff, 1);
+  rimLight.position.set(-3, 2, -4);
+
+  ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+
+  sceneMain.add(keyLight, fillLight, rimLight, ambLight);
+  sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
 
   // --- CUBECAMERA ---
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
@@ -60,10 +65,10 @@ function init() {
       bgMain = gltf.scene;
       bgEnv = bgMain.clone();
 
-      bgMain.position.z = -2;
-      bgEnv.position.z = -2;
-      bgMain.scale.set(3, 3, 3);
-      bgEnv.scale.set(3, 3, 3);
+      bgMain.position.z = -2.5;
+      bgEnv.position.z = -2.5;
+      bgMain.scale.set(6.5, 6.5, 6.5);
+      bgEnv.scale.set(6.5, 6.5, 6.5);
 
       bgMain.traverse((child) => {
         if (child.isMesh) {
@@ -85,7 +90,7 @@ function init() {
       sceneMain.add(bgMain);
       sceneEnv.add(bgEnv);
 
-      console.log("✅ clarity_bg.glb dimuat di sceneEnv & sceneMain");
+      console.log("✅ clarity_bg.glb dimuat");
     },
     undefined,
     (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
@@ -138,7 +143,7 @@ function init() {
       if (glassMeshes.length > 0) setupGUI();
 
       animate();
-      console.log("✅ clarity_keychain.glb dimuat (objek utama)");
+      console.log("✅ clarity_keychain.glb dimuat");
     },
     undefined,
     (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
@@ -170,31 +175,25 @@ function setupGUI() {
 
   // 💡 Lighting
   const lightFolder = gui.addFolder("Lighting Controls");
-  lightFolder.add(ambLight, "intensity", 0, 5, 0.1).name("Ambient Intensity");
-  lightFolder.add(dirLight, "intensity", 0, 10, 0.1).name("Directional Intensity");
+  const lights = { key: keyLight, fill: fillLight, rim: rimLight, amb: ambLight };
 
-  const params = { color: "#ffffff" };
-  lightFolder
-    .addColor(params, "color")
-    .name("Light Color")
-    .onChange((v) => dirLight.color.set(v));
+  Object.entries(lights).forEach(([label, light]) => {
+    const folder = lightFolder.addFolder(label.toUpperCase());
+    if (light.isLight) {
+      folder.add(light, "intensity", 0, 10, 0.1).name("Intensity");
+      if (light.position) {
+        folder.add(light.position, "x", -10, 10, 0.1).name("X");
+        folder.add(light.position, "y", -10, 10, 0.1).name("Y");
+        folder.add(light.position, "z", -10, 10, 0.1).name("Z");
+      }
+      const params = { color: light.color.getStyle() };
+      folder.addColor(params, "color").name("Color").onChange((v) => light.color.set(v));
+    }
+  });
 
-  lightFolder.add(dirLight.position, "x", -10, 10, 0.1).name("Light X");
-  lightFolder.add(dirLight.position, "y", -10, 10, 0.1).name("Light Y");
-  lightFolder.add(dirLight.position, "z", -10, 10, 0.1).name("Light Z");
-
-  const lightSize = { size: 1.0 };
-  lightFolder
-    .add(lightSize, "size", 0.1, 5, 0.1)
-    .name("Size (visual)")
-    .onChange((val) => dirLight.scale.set(val, val, val));
-
-  // 🪞 Background Controls
+  // 🪞 Background
   const bgFolder = gui.addFolder("Background Controls");
-  const bgParams = {
-    z: bgMain.position.z,
-    scale: bgMain.scale.x,
-  };
+  const bgParams = { z: bgMain.position.z, scale: bgMain.scale.x };
 
   bgFolder.add(bgParams, "z", -5, 5, 0.1).name("Z Position").onChange((v) => {
     if (bgMain && bgEnv) {
@@ -202,7 +201,6 @@ function setupGUI() {
       bgEnv.position.z = v;
     }
   });
-
   bgFolder.add(bgParams, "scale", 0.5, 10, 0.1).name("Scale").onChange((v) => {
     if (bgMain && bgEnv) {
       bgMain.scale.set(v, v, v);
