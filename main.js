@@ -15,8 +15,6 @@ let idleRotation = 0;
 const rotationSpeed = 0.01;
 const moveStrength = 0.5;
 const lerpSpeed = 0.05;
-let frameCount = 0;
-let isTouching = false;
 
 function init() {
   const canvas = document.getElementById("webgl");
@@ -24,29 +22,31 @@ function init() {
   // --- SCENE SETUP ---
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
+
   sceneEnv = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 0, window.innerWidth < 768 ? 4 : 3);
+  camera.position.set(0, 0, 3);
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.setPixelRatio(window.devicePixelRatio);
 
   // --- LIGHTING ---
   keyLight = new THREE.DirectionalLight(0xffffff, 4);
   keyLight.position.set(3, 4, 5);
+
   fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
+
   rimLight = new THREE.DirectionalLight(0xffffff, 1);
   rimLight.position.set(-3, 2, -4);
+
   ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+
   sceneMain.add(keyLight, fillLight, rimLight, ambLight);
   sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
 
-  // --- CUBE CAMERA ---
+  // --- CUBECAMERA ---
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -55,73 +55,99 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   sceneEnv.add(cubeCam);
 
+  // --- LOADERS ---
   const loader = new GLTFLoader();
 
-  // Background
-  loader.load("./asset/clarity_bg.glb", (gltf) => {
-    bgMain = gltf.scene;
-    bgEnv = bgMain.clone();
-    bgMain.position.z = -2.5;
-    bgEnv.position.z = -2.5;
-    bgMain.scale.set(6.5, 6.5, 6.5);
-    bgEnv.scale.set(6.5, 6.5, 6.5);
+  // 1️⃣ Background
+  loader.load(
+    "./asset/clarity_bg.glb",
+    (gltf) => {
+      bgMain = gltf.scene;
+      bgEnv = bgMain.clone();
 
-    bgMain.traverse((child) => {
-      if (child.isMesh)
-        child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
-    });
-    bgEnv.traverse((child) => {
-      if (child.isMesh)
-        child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
-    });
+      bgMain.position.z = -2.5;
+      bgEnv.position.z = -2.5;
+      bgMain.scale.set(6.5, 6.5, 6.5);
+      bgEnv.scale.set(6.5, 6.5, 6.5);
 
-    sceneMain.add(bgMain);
-    sceneEnv.add(bgEnv);
-  });
-
-  // Keychain
-  loader.load("./asset/clarity_keychain.glb", (gltf) => {
-    const model = gltf.scene;
-    model.scale.set(4, 4, 4);
-    sceneMain.add(model);
-
-    keychainController =
-      model.getObjectByName("Keychain Controler") ||
-      model.getObjectByName("Keychain Controller") ||
-      model;
-
-    model.traverse((child) => {
-      if (child.isMesh) {
-        const name = child.name.toLowerCase();
-        if (name.includes("plastik")) {
-          const mat = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            roughness: 0.05,
-            metalness: 0,
-            transmission: 1,
-            ior: 1.3,
-            thickness: 2,
-            envMap: cubeTarget.texture,
-            envMapIntensity: 1.0,
-            clearcoat: 1,
-            clearcoatRoughness: 0.1,
-          });
-          child.material = mat;
-          glassMeshes.push(mat);
-        }
-        if (name.includes("besi")) {
-          child.material = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            metalness: 1,
-            roughness: 0.3,
+      bgMain.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false,
           });
         }
-      }
-    });
+      });
+      bgEnv.traverse((child) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false,
+          });
+        }
+      });
 
-    if (glassMeshes.length > 0) setupGUI();
-    animate();
-  });
+      sceneMain.add(bgMain);
+      sceneEnv.add(bgEnv);
+
+      console.log("✅ clarity_bg.glb dimuat");
+    },
+    undefined,
+    (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
+  );
+
+  // 2️⃣ Keychain
+  loader.load(
+    "./asset/clarity_keychain.glb",
+    (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(4, 4, 4);
+      sceneMain.add(model);
+
+      keychainController =
+        model.getObjectByName("Keychain Controler") ||
+        model.getObjectByName("Keychain Controller") ||
+        model;
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          const name = child.name.toLowerCase();
+
+          if (name.includes("plastik")) {
+            const mat = new THREE.MeshPhysicalMaterial({
+              color: 0xffffff,
+              roughness: 0.05,
+              metalness: 0,
+              transmission: 1,
+              ior: 1.3,
+              thickness: 2,
+              envMap: cubeTarget.texture,
+              envMapIntensity: 1.0,
+              clearcoat: 1,
+              clearcoatRoughness: 0.1,
+            });
+            child.material = mat;
+            glassMeshes.push(mat);
+          }
+
+          if (name.includes("besi")) {
+            child.material = new THREE.MeshPhysicalMaterial({
+              color: 0xffffff,
+              metalness: 1,
+              roughness: 0.3,
+            });
+          }
+        }
+      });
+
+      if (glassMeshes.length > 0) setupGUI();
+
+      animate();
+      console.log("✅ clarity_keychain.glb dimuat");
+    },
+    undefined,
+    (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
+  );
 
   // --- INTERAKSI ---
   window.addEventListener("mousemove", (e) => {
@@ -129,27 +155,14 @@ function init() {
     cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
   });
 
-  // --- TOUCH INTERAKSI ---
-  window.addEventListener("touchstart", (e) => {
-    isTouching = true;
-    handleTouchMove(e);
-  });
-  window.addEventListener("touchmove", handleTouchMove);
-  window.addEventListener("touchend", () => (isTouching = false));
-
   window.addEventListener("resize", onResize);
 }
 
-function handleTouchMove(e) {
-  if (e.touches.length > 0) {
-    const t = e.touches[0];
-    cursor.x = (t.clientX / window.innerWidth - 0.5) * 2;
-    cursor.y = -(t.clientY / window.innerHeight - 0.5) * 2;
-  }
-}
-
+// --- GUI SETUP ---
 function setupGUI() {
   gui = new GUI();
+
+  // 🎛️ Glass
   const mat = glassMeshes[0];
   const glassFolder = gui.addFolder("Glass Material");
   glassFolder.add(mat, "transmission", 0, 1, 0.01);
@@ -159,15 +172,55 @@ function setupGUI() {
   glassFolder.add(mat, "metalness", 0, 1, 0.01);
   glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
   glassFolder.open();
+
+  // 💡 Lighting
+  const lightFolder = gui.addFolder("Lighting Controls");
+  const lights = { key: keyLight, fill: fillLight, rim: rimLight, amb: ambLight };
+
+  Object.entries(lights).forEach(([label, light]) => {
+    const folder = lightFolder.addFolder(label.toUpperCase());
+    if (light.isLight) {
+      folder.add(light, "intensity", 0, 10, 0.1).name("Intensity");
+      if (light.position) {
+        folder.add(light.position, "x", -10, 10, 0.1).name("X");
+        folder.add(light.position, "y", -10, 10, 0.1).name("Y");
+        folder.add(light.position, "z", -10, 10, 0.1).name("Z");
+      }
+      const params = { color: light.color.getStyle() };
+      folder.addColor(params, "color").name("Color").onChange((v) => light.color.set(v));
+    }
+  });
+
+  // 🪞 Background
+  const bgFolder = gui.addFolder("Background Controls");
+  const bgParams = { z: bgMain.position.z, scale: bgMain.scale.x };
+
+  bgFolder.add(bgParams, "z", -5, 5, 0.1).name("Z Position").onChange((v) => {
+    if (bgMain && bgEnv) {
+      bgMain.position.z = v;
+      bgEnv.position.z = v;
+    }
+  });
+  bgFolder.add(bgParams, "scale", 0.5, 10, 0.1).name("Scale").onChange((v) => {
+    if (bgMain && bgEnv) {
+      bgMain.scale.set(v, v, v);
+      bgEnv.scale.set(v, v, v);
+    }
+  });
+
+  glassFolder.open();
+  lightFolder.open();
+  bgFolder.open();
 }
 
+// --- RESIZE ---
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
-  camera.position.z = window.innerWidth < 768 ? 4 : 3;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// --- LOOP ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -182,12 +235,9 @@ function animate() {
     keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
     keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
 
-    frameCount++;
-    if (frameCount % 3 === 0) {
-      keychainController.visible = false;
-      cubeCam.update(renderer, sceneEnv);
-      keychainController.visible = true;
-    }
+    keychainController.visible = false;
+    cubeCam.update(renderer, sceneEnv);
+    keychainController.visible = true;
   }
 
   renderer.render(sceneMain, camera);
