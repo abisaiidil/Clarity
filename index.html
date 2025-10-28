@@ -1,40 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clarity 3D Hero</title>
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        background-color: #ffffff;
-      }
-      #webgl {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-      .lil-gui.root {
-        display: none; /* hidden by default */
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="webgl"></canvas>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clarity Hero</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #ffffff;
+      font-family: sans-serif;
+    }
+    #three-container {
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="three-container"></div>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.152.2/build/three.module.js",
-          "GLTFLoader": "https://unpkg.com/three@0.152.2/examples/jsm/loaders/GLTFLoader.js",
-          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.18/+esm"
-        }
-      }
-    </script>
-    <script type="module" src="./main.js?v=7"></script>
-  </body>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+    import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
+    import './main.js?v=5';
+  </script>
+</body>
 </html>
