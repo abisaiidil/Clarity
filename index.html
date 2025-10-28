@@ -3,31 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clarity Hero</title>
+  <title>3D Clarity Hero</title>
   <style>
-    body {
+    html, body {
       margin: 0;
+      height: 100%;
       overflow: hidden;
-      background-color: #ffffff;
-      font-family: sans-serif;
+      background: #ffffff;
     }
     #three-container {
-      width: 100vw;
-      height: 100vh;
       position: fixed;
       top: 0;
       left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
     }
   </style>
 </head>
 <body>
   <div id="three-container"></div>
 
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
-    import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
-    import './main.js?v=5';
+  <!-- 🧩 Importmap agar browser paham "three", "GLTFLoader", dan "lil-gui" -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
+      "GLTFLoader": "https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
+    }
+  }
   </script>
+
+  <!-- 🧠 Panggil main.js -->
+  <script type="module" src="./main.js?v=2"></script>
 </body>
 </html>
