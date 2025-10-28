@@ -7,8 +7,7 @@ let cubeCam, cubeTarget;
 let keychainController;
 let bgMain, bgEnv;
 let glassMeshes = [];
-let keyLight, fillLight, rimLight, ambLight;
-let gui;
+let gui, guiVisible = false;
 
 const cursor = { x: 0, y: 0 };
 let idleRotation = 0;
@@ -33,15 +32,15 @@ function init() {
   renderer.setPixelRatio(window.devicePixelRatio);
 
   // --- LIGHTING ---
-  keyLight = new THREE.DirectionalLight(0xffffff, 4);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 4);
   keyLight.position.set(3, 4, 5);
 
-  fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
+  const fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
 
-  rimLight = new THREE.DirectionalLight(0xffffff, 1);
+  const rimLight = new THREE.DirectionalLight(0xffffff, 1);
   rimLight.position.set(-3, 2, -4);
 
-  ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+  const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
 
   sceneMain.add(keyLight, fillLight, rimLight, ambLight);
   sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
@@ -55,7 +54,6 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   sceneEnv.add(cubeCam);
 
-  // --- LOADERS ---
   const loader = new GLTFLoader();
 
   // 1️⃣ Background
@@ -89,7 +87,6 @@ function init() {
 
       sceneMain.add(bgMain);
       sceneEnv.add(bgEnv);
-
       console.log("✅ clarity_bg.glb dimuat");
     },
     undefined,
@@ -141,7 +138,6 @@ function init() {
       });
 
       if (glassMeshes.length > 0) setupGUI();
-
       animate();
       console.log("✅ clarity_keychain.glb dimuat");
     },
@@ -149,18 +145,19 @@ function init() {
     (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
   );
 
-  // --- INTERAKSI ---
   window.addEventListener("mousemove", (e) => {
     cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
     cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
   });
 
   window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", toggleGUI);
 }
 
 // --- GUI SETUP ---
 function setupGUI() {
-  gui = new GUI();
+  gui = new GUI({ width: 300 });
+  gui.domElement.classList.add("root");
 
   // 🎛️ Glass
   const mat = glassMeshes[0];
@@ -171,25 +168,6 @@ function setupGUI() {
   glassFolder.add(mat, "roughness", 0, 1, 0.01);
   glassFolder.add(mat, "metalness", 0, 1, 0.01);
   glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
-  glassFolder.open();
-
-  // 💡 Lighting
-  const lightFolder = gui.addFolder("Lighting Controls");
-  const lights = { key: keyLight, fill: fillLight, rim: rimLight, amb: ambLight };
-
-  Object.entries(lights).forEach(([label, light]) => {
-    const folder = lightFolder.addFolder(label.toUpperCase());
-    if (light.isLight) {
-      folder.add(light, "intensity", 0, 10, 0.1).name("Intensity");
-      if (light.position) {
-        folder.add(light.position, "x", -10, 10, 0.1).name("X");
-        folder.add(light.position, "y", -10, 10, 0.1).name("Y");
-        folder.add(light.position, "z", -10, 10, 0.1).name("Z");
-      }
-      const params = { color: light.color.getStyle() };
-      folder.addColor(params, "color").name("Color").onChange((v) => light.color.set(v));
-    }
-  });
 
   // 🪞 Background
   const bgFolder = gui.addFolder("Background Controls");
@@ -207,10 +185,14 @@ function setupGUI() {
       bgEnv.scale.set(v, v, v);
     }
   });
+}
 
-  glassFolder.open();
-  lightFolder.open();
-  bgFolder.open();
+// --- TOGGLE GUI ---
+function toggleGUI(e) {
+  if (e.key.toLowerCase() === "h" && gui) {
+    guiVisible = !guiVisible;
+    gui.domElement.style.display = guiVisible ? "block" : "none";
+  }
 }
 
 // --- RESIZE ---
