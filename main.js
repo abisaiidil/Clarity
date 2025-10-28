@@ -1,228 +1,184 @@
-import * as THREE from "three";
-import { GLTFLoader } from "GLTFLoader";
-import GUI from "lil-gui";
+import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
 
-let sceneMain, sceneEnv, camera, renderer;
-let cubeCam, cubeTarget;
-let keychainController;
-let bgMain, bgEnv;
-let glassMeshes = [];
-let gui, guiVisible = false;
+// === SETUP DASAR ===
+let scene, camera, renderer;
+let keychain, background;
+let clock = new THREE.Clock();
 
-const cursor = { x: 0, y: 0 };
-let idleRotation = 0;
-const rotationSpeed = 0.01;
-const moveStrength = 0.5;
-const lerpSpeed = 0.05;
+// === PARAMETER INTERAKSI ===
+const params = {
+  moveStrength: 0.4,
+  lerpSpeed: 0.05,
+  rotationSpeed: 0.3,
+  glassRoughness: 0.05,
+  glassTransmission: 1.0,
+  sandIntensity: 0.15,
+};
 
-function init() {
-  const canvas = document.getElementById("webgl");
+// === SETUP SCENE ===
+const container = document.getElementById('three-container');
+scene = new THREE.Scene();
 
-  // --- SCENE SETUP ---
-  sceneMain = new THREE.Scene();
-  sceneMain.background = new THREE.Color(0xffffff);
+// === CAMERA ===
+camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 3);
 
-  sceneEnv = new THREE.Scene();
+// === RENDERER ===
+renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 0, 3);
+// === LIGHTING ===
+const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+scene.add(ambient);
 
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+dirLight.position.set(2, 4, 3);
+scene.add(dirLight);
 
-  // --- LIGHTING ---
-  const keyLight = new THREE.DirectionalLight(0xffffff, 4);
-  keyLight.position.set(3, 4, 5);
-
-  const fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
-
-  const rimLight = new THREE.DirectionalLight(0xffffff, 1);
-  rimLight.position.set(-3, 2, -4);
-
-  const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
-
-  sceneMain.add(keyLight, fillLight, rimLight, ambLight);
-  sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
-
-  // --- CUBECAMERA ---
-  cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
-    format: THREE.RGBAFormat,
-    generateMipmaps: true,
-    minFilter: THREE.LinearMipmapLinearFilter,
-  });
-  cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
-  sceneEnv.add(cubeCam);
-
-  const loader = new GLTFLoader();
-
-  // 1️⃣ Background
-  loader.load(
-    "./asset/clarity_bg.glb",
-    (gltf) => {
-      bgMain = gltf.scene;
-      bgEnv = bgMain.clone();
-
-      bgMain.position.z = -2.5;
-      bgEnv.position.z = -2.5;
-      bgMain.scale.set(6.5, 6.5, 6.5);
-      bgEnv.scale.set(6.5, 6.5, 6.5);
-
-      bgMain.traverse((child) => {
-        if (child.isMesh) {
-          child.material = new THREE.MeshBasicMaterial({
-            map: child.material.map || null,
-            toneMapped: false,
-          });
-        }
-      });
-      bgEnv.traverse((child) => {
-        if (child.isMesh) {
-          child.material = new THREE.MeshBasicMaterial({
-            map: child.material.map || null,
-            toneMapped: false,
-          });
-        }
-      });
-
-      sceneMain.add(bgMain);
-      sceneEnv.add(bgEnv);
-      console.log("✅ clarity_bg.glb dimuat");
-    },
-    undefined,
-    (err) => console.error("❌ Gagal memuat clarity_bg.glb:", err)
-  );
-
-  // 2️⃣ Keychain
-  loader.load(
-    "./asset/clarity_keychain.glb",
-    (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(4, 4, 4);
-      sceneMain.add(model);
-
-      keychainController =
-        model.getObjectByName("Keychain Controler") ||
-        model.getObjectByName("Keychain Controller") ||
-        model;
-
-      model.traverse((child) => {
-        if (child.isMesh) {
-          const name = child.name.toLowerCase();
-
-          if (name.includes("plastik")) {
-            const mat = new THREE.MeshPhysicalMaterial({
-              color: 0xffffff,
-              roughness: 0.05,
-              metalness: 0,
-              transmission: 1,
-              ior: 1.3,
-              thickness: 2,
-              envMap: cubeTarget.texture,
-              envMapIntensity: 1.0,
-              clearcoat: 1,
-              clearcoatRoughness: 0.1,
-            });
-            child.material = mat;
-            glassMeshes.push(mat);
-          }
-
-          if (name.includes("besi")) {
-            child.material = new THREE.MeshPhysicalMaterial({
-              color: 0xffffff,
-              metalness: 1,
-              roughness: 0.3,
-            });
-          }
-        }
-      });
-
-      if (glassMeshes.length > 0) setupGUI();
-      animate();
-      console.log("✅ clarity_keychain.glb dimuat");
-    },
-    undefined,
-    (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
-  );
-
-  window.addEventListener("mousemove", (e) => {
-    cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
-    cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
-  });
-
-  window.addEventListener("resize", onResize);
-  window.addEventListener("keydown", toggleGUI);
+// === NOISE TEXTURE (untuk efek sandblasted) ===
+const noiseCanvas = document.createElement('canvas');
+noiseCanvas.width = 128;
+noiseCanvas.height = 128;
+const nctx = noiseCanvas.getContext('2d');
+const nimg = nctx.createImageData(128, 128);
+for (let i = 0; i < nimg.data.length; i += 4) {
+  const shade = Math.random() * 255;
+  nimg.data[i] = nimg.data[i + 1] = nimg.data[i + 2] = shade;
+  nimg.data[i + 3] = 255;
 }
+nctx.putImageData(nimg, 0, 0);
+const noiseTexture = new THREE.CanvasTexture(noiseCanvas);
+noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
+noiseTexture.repeat.set(4, 4);
 
-// --- GUI SETUP ---
-function setupGUI() {
-  gui = new GUI({ width: 300 });
-  gui.domElement.classList.add("root");
+// === LOADERS ===
+const loader = new GLTFLoader();
+const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+  format: THREE.RGBAFormat,
+  generateMipmaps: true,
+  minFilter: THREE.LinearMipmapLinearFilter,
+});
+const cubeCamera = new THREE.CubeCamera(0.1, 10, cubeRenderTarget);
+scene.add(cubeCamera);
 
-  // 🎛️ Glass
-  const mat = glassMeshes[0];
-  const glassFolder = gui.addFolder("Glass Material");
-  glassFolder.add(mat, "transmission", 0, 1, 0.01);
-  glassFolder.add(mat, "ior", 1.0, 2.0, 0.01);
-  glassFolder.add(mat, "thickness", 0.1, 5, 0.1);
-  glassFolder.add(mat, "roughness", 0, 1, 0.01);
-  glassFolder.add(mat, "metalness", 0, 1, 0.01);
-  glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
+// === LOAD BACKGROUND ===
+loader.load('./asset/clarity_bg.glb', (gltf) => {
+  background = gltf.scene;
+  background.scale.set(6.5, 6.5, 6.5);
+  background.position.set(0, 0, -0.3);
+  scene.add(background);
+});
 
-  // 🪞 Background
-  const bgFolder = gui.addFolder("Background Controls");
-  const bgParams = { z: bgMain.position.z, scale: bgMain.scale.x };
+// === LOAD KEYCHAIN ===
+loader.load('./asset/clarity_keychain.glb', (gltf) => {
+  keychain = gltf.scene.getObjectByName('Keychain Controler') || gltf.scene;
+  keychain.scale.set(4, 4, 4);
+  scene.add(keychain);
 
-  bgFolder.add(bgParams, "z", -5, 5, 0.1).name("Z Position").onChange((v) => {
-    if (bgMain && bgEnv) {
-      bgMain.position.z = v;
-      bgEnv.position.z = v;
+  keychain.traverse((child) => {
+    if (child.isMesh && child.name === 'plastik') {
+      child.material = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        roughness: params.glassRoughness,
+        transmission: params.glassTransmission,
+        ior: 1.33,
+        thickness: 0.5,
+        envMap: cubeRenderTarget.texture,
+        envMapIntensity: 1,
+        normalMap: noiseTexture,
+        normalScale: new THREE.Vector2(params.sandIntensity, params.sandIntensity),
+      });
+    }
+    if (child.isMesh && child.name === 'besi') {
+      child.material = new THREE.MeshPhysicalMaterial({
+        color: 0x888888,
+        metalness: 1,
+        roughness: 0.3,
+      });
     }
   });
-  bgFolder.add(bgParams, "scale", 0.5, 10, 0.1).name("Scale").onChange((v) => {
-    if (bgMain && bgEnv) {
-      bgMain.scale.set(v, v, v);
-      bgEnv.scale.set(v, v, v);
-    }
-  });
-}
 
-// --- TOGGLE GUI ---
-function toggleGUI(e) {
-  if (e.key.toLowerCase() === "h" && gui) {
-    guiVisible = !guiVisible;
-    gui.domElement.style.display = guiVisible ? "block" : "none";
-  }
-}
+  setupGUI();
+  animate();
+});
 
-// --- RESIZE ---
-function onResize() {
+// === INTERAKSI MOUSE ===
+const targetPos = new THREE.Vector3();
+const mouse = new THREE.Vector2();
+window.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+// === RESIZE ===
+window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// === GUI ===
+let gui;
+function setupGUI() {
+  gui = new GUI({ title: 'Controls' });
+  gui.hide();
+
+  const glass = gui.addFolder('Glass Material');
+  glass.add(params, 'glassRoughness', 0, 1, 0.01).onChange(updateMaterial);
+  glass.add(params, 'glassTransmission', 0, 1, 0.01).onChange(updateMaterial);
+  glass.add(params, 'sandIntensity', 0, 1, 0.01).onChange(updateMaterial);
+
+  const inter = gui.addFolder('Interaction');
+  inter.add(params, 'moveStrength', 0, 2, 0.01);
+  inter.add(params, 'lerpSpeed', 0.01, 0.2, 0.01);
+  inter.add(params, 'rotationSpeed', 0.1, 1, 0.01);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'g') {
+      gui._hidden ? gui.show() : gui.hide();
+    }
+  });
 }
 
-// --- LOOP ---
+function updateMaterial() {
+  if (!keychain) return;
+  keychain.traverse((child) => {
+    if (child.isMesh && child.name === 'plastik') {
+      child.material.roughness = params.glassRoughness;
+      child.material.transmission = params.glassTransmission;
+      child.material.normalScale.set(params.sandIntensity, params.sandIntensity);
+      child.material.needsUpdate = true;
+    }
+  });
+}
+
+// === ANIMATE ===
 function animate() {
   requestAnimationFrame(animate);
 
-  if (keychainController) {
-    idleRotation += rotationSpeed;
-    keychainController.rotation.y = idleRotation;
-    keychainController.rotation.x = 1;
-    keychainController.rotation.z = 0.6;
+  if (keychain) {
+    const t = clock.getElapsedTime();
 
-    const targetX = cursor.x * moveStrength;
-    const targetY = cursor.y * moveStrength;
-    keychainController.position.x += (targetX - keychainController.position.x) * lerpSpeed;
-    keychainController.position.y += (targetY - keychainController.position.y) * lerpSpeed;
+    // Idle rotation
+    keychain.rotation.x = Math.sin(t * params.rotationSpeed) * 0.5 + 1;
+    keychain.rotation.y += 0.005;
 
-    keychainController.visible = false;
-    cubeCam.update(renderer, sceneEnv);
-    keychainController.visible = true;
+    // Follow cursor (smooth movement)
+    const targetX = mouse.x * params.moveStrength;
+    const targetY = mouse.y * params.moveStrength;
+    targetPos.lerp(new THREE.Vector3(targetX, targetY, 0), params.lerpSpeed);
+    keychain.position.x = targetPos.x;
+    keychain.position.y = targetPos.y;
+
+    // Update refractive cube camera
+    keychain.visible = false;
+    cubeCamera.update(renderer, scene);
+    keychain.visible = true;
   }
 
-  renderer.render(sceneMain, camera);
+  renderer.render(scene, camera);
 }
-
-init();
