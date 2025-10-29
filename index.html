@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3D Clarity Hero</title>
+  <title>Clarity Hero Page</title>
   <style>
     html, body {
       margin: 0;
-      height: 100%;
+      padding: 0;
       overflow: hidden;
       background: #ffffff;
+      width: 100%;
+      height: 100%;
     }
+
     #three-container {
       position: fixed;
       top: 0;
@@ -24,18 +27,17 @@
 <body>
   <div id="three-container"></div>
 
-  <!-- 🧩 Importmap agar browser paham "three", "GLTFLoader", dan "lil-gui" -->
+  <!-- Importmap agar import Three.js & GLTFLoader bisa dikenali browser -->
   <script type="importmap">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
-      "GLTFLoader": "https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js",
-      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
+      "GLTFLoader": "https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js"
     }
   }
   </script>
 
-  <!-- 🧠 Panggil main.js -->
-  <script type="module" src="./main.js?v=2"></script>
+  <!-- Panggil main.js -->
+  <script type="module" src="./main.js?v=1"></script>
 </body>
 </html>
