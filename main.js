@@ -6,24 +6,26 @@ let sceneMain, sceneEnv, camera, renderer;
 let cubeCam, cubeTarget;
 let keychainController;
 let bgMain, bgEnv;
-let frontGlass, frontGlassEnv;
 let glassMeshes = [];
 let gui, guiVisible = false;
 
 const cursor = { x: 0, y: 0 };
 let idleRotation = 0;
 let enableRotation = true;
+
 const params = {
   moveStrength: 0.15,
   lerpSpeed: 0.04,
-  rotationSpeed: 0.004,
+  rotationSpeed: 0.015, // default dari hasil tweak-mu
   keyLightIntensity: 5,
-  frontGlassZ: 0.3,
-  frontGlassScale: 3.35,
+  fillLightIntensity: 0.9,
+  rimLightIntensity: 1,
+  ambLightIntensity: 0.5,
 };
 
+let keyLight, fillLight, rimLight, ambLight;
+
 function init() {
-  // --- AMBIL CANVAS DARI HTML ---
   const canvas = document.getElementById("webgl");
 
   // --- SCENE SETUP ---
@@ -40,13 +42,15 @@ function init() {
   renderer.setPixelRatio(window.devicePixelRatio);
 
   // --- LIGHTING ---
-  const keyLight = new THREE.DirectionalLight(0xffffff, params.keyLightIntensity);
+  keyLight = new THREE.DirectionalLight(0xffffff, params.keyLightIntensity);
   keyLight.position.set(3, 4, 5);
 
-  const fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 0.9);
-  const rimLight = new THREE.DirectionalLight(0xffffff, 1);
+  fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, params.fillLightIntensity);
+
+  rimLight = new THREE.DirectionalLight(0xffffff, params.rimLightIntensity);
   rimLight.position.set(-3, 2, -4);
-  const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+
+  ambLight = new THREE.AmbientLight(0xffffff, params.ambLightIntensity);
 
   sceneMain.add(keyLight, fillLight, rimLight, ambLight);
   sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
@@ -152,28 +156,6 @@ function init() {
     (err) => console.error("❌ Gagal memuat clarity_keychain.glb:", err)
   );
 
-  // --- FRONT GLASS LAYER (plane kaca di depan background) ---
-  const glassPlaneGeo = new THREE.PlaneGeometry(6, 3.5);
-  const glassPlaneMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    roughness: 0.3,
-    metalness: 0,
-    transmission: 1,
-    ior: 1.35,
-    thickness: 0.1,
-    envMap: cubeTarget.texture,
-    envMapIntensity: 1.0,
-    clearcoat: 1,
-    clearcoatRoughness: 0.1,
-  });
-  frontGlass = new THREE.Mesh(glassPlaneGeo, glassPlaneMat);
-  frontGlass.position.z = params.frontGlassZ;
-  frontGlass.scale.set(params.frontGlassScale, params.frontGlassScale, params.frontGlassScale);
-
-  frontGlassEnv = frontGlass.clone();
-  sceneMain.add(frontGlass);
-  sceneEnv.add(frontGlassEnv);
-
   // --- EVENT LISTENERS ---
   window.addEventListener("mousemove", (e) => {
     cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
@@ -197,13 +179,12 @@ function setupGUI() {
   glassFolder.add(mat, "roughness", 0, 1, 0.01);
   glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
 
-  // 💡 Lighting
-  const lightFolder = gui.addFolder("Lighting");
-  lightFolder.add(params, "keyLightIntensity", 0, 10, 0.1).onChange((v) => {
-    sceneMain.traverse((obj) => {
-      if (obj.isDirectionalLight) obj.intensity = v;
-    });
-  });
+  // 💡 Lighting (masing-masing lampu)
+  const lightFolder = gui.addFolder("Lighting Controls");
+  lightFolder.add(params, "keyLightIntensity", 0, 10, 0.1).name("Key Light").onChange((v) => (keyLight.intensity = v));
+  lightFolder.add(params, "fillLightIntensity", 0, 3, 0.1).name("Fill Light").onChange((v) => (fillLight.intensity = v));
+  lightFolder.add(params, "rimLightIntensity", 0, 3, 0.1).name("Rim Light").onChange((v) => (rimLight.intensity = v));
+  lightFolder.add(params, "ambLightIntensity", 0, 2, 0.1).name("Ambient").onChange((v) => (ambLight.intensity = v));
 
   // 🔧 Background
   const bgFolder = gui.addFolder("Background Controls");
@@ -223,26 +204,10 @@ function setupGUI() {
 
   // 🔩 Keychain
   const keychainFolder = gui.addFolder("Keychain Controls");
-  keychainFolder.add(params, "rotationSpeed", 0, 0.02, 0.001).name("Rotation Speed");
+  keychainFolder.add(params, "rotationSpeed", 0, 0.05, 0.001).name("Rotation Speed");
   keychainFolder.add(params, "moveStrength", 0, 1, 0.01).name("Move Strength");
   keychainFolder.add(params, "lerpSpeed", 0.01, 0.2, 0.01).name("Lerp Speed");
   keychainFolder.add({ toggleRotation: () => (enableRotation = !enableRotation) }, "toggleRotation").name("Toggle Rotation");
-
-  // 🌫️ Front Glass Layer
-  const fgFolder = gui.addFolder("Front Glass Layer");
-  const matFG = frontGlass.material;
-  fgFolder.add(matFG, "roughness", 0, 1, 0.01);
-  fgFolder.add(matFG, "transmission", 0, 1, 0.01);
-  fgFolder.add(matFG, "thickness", 0.05, 2, 0.05);
-  fgFolder.add(matFG, "envMapIntensity", 0, 3, 0.1);
-  fgFolder.add(params, "frontGlassZ", -1, 2, 0.01).name("Z Offset").onChange((v) => {
-    frontGlass.position.z = v;
-    frontGlassEnv.position.z = v;
-  });
-  fgFolder.add(params, "frontGlassScale", 0.5, 10, 0.1).name("Scale").onChange((v) => {
-    frontGlass.scale.set(v, v, v);
-    frontGlassEnv.scale.set(v, v, v);
-  });
 }
 
 // --- TOGGLE GUI ---
