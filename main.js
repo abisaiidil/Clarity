@@ -1,77 +1,81 @@
 import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
+import GUI from "lil-gui";
 
 // === SETUP DASAR ===
+let scene, camera, renderer;
+let keychain, background, light, cubeCamera, cubeRenderTarget;
+
+// === PARAMETER AWAL ===
+const params = {
+  // Glass
+  glassRoughness: 0.05,
+  glassTransmission: 1.0,
+  glassIOR: 1.33,
+  glassThickness: 1.0,
+  glassReflectivity: 0.8,
+
+  // Interaction
+  moveStrength: 0.4,
+  lerpSpeed: 0.05,
+  rotationSpeed: 0.3,
+
+  // Background
+  bgScale: 6.5,
+  bgPosX: 0,
+  bgPosY: 0,
+  bgPosZ: -1.2,
+
+  // Keychain
+  keyScale: 4.0,
+  keyPosX: 0,
+  keyPosY: 0,
+  keyPosZ: 0,
+
+  // Lighting
+  lightIntensity: 2.0,
+};
+
+// === SCENE ===
 const container = document.getElementById("three-container");
-const scene = new THREE.Scene();
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+scene = new THREE.Scene();
+
+// === CAMERA ===
+camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 3);
+
+// === RENDERER ===
+renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
-let camera;
+// === LIGHT ===
+light = new THREE.DirectionalLight(0xffffff, params.lightIntensity);
+light.position.set(3, 5, 5);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
-// === LOAD GLB DENGAN KAMERA BLENDER ===
-// pastikan nama file-mu sesuai: clarity_bg.glb di folder asset/
-const loader = new GLTFLoader();
-loader.load(
-  "./asset/clarity_bg.glb",
-  (gltf) => {
-    const model = gltf.scene;
-    scene.add(model);
-
-    // ambil kamera dari Blender
-    if (gltf.cameras && gltf.cameras.length > 0) {
-      camera = gltf.cameras[0];
-      scene.add(camera);
-      console.log("🎥 Kamera Blender digunakan:", camera);
-    } else {
-      // fallback camera jika glb tidak berisi kamera
-      camera = new THREE.OrthographicCamera(
-        window.innerWidth / -200,
-        window.innerWidth / 200,
-        window.innerHeight / 200,
-        window.innerHeight / -200,
-        0.1,
-        100
-      );
-      camera.position.set(0, 0, 5);
-      console.warn("⚠️ Tidak ada kamera di .glb — menggunakan kamera default");
-    }
-
-    // tambahkan sedikit ambient light biar tidak terlalu gelap
-    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-    scene.add(ambient);
-
-    animate();
-  },
-  (xhr) => {
-    console.log(`⏳ Loading ${(xhr.loaded / xhr.total) * 100}%`);
-  },
-  (error) => {
-    console.error("❌ Gagal memuat GLB:", error);
-  }
-);
-
-// === ANIMATE ===
-function animate() {
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
-}
-
-// === RESIZE RESPONSIVE ===
-window.addEventListener("resize", () => {
-  if (camera && camera.isPerspectiveCamera) {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  } else if (camera && camera.isOrthographicCamera) {
-    const aspect = window.innerWidth / window.innerHeight;
-    const frustumHeight = 2;
-    camera.left = (-frustumHeight * aspect) / 2;
-    camera.right = (frustumHeight * aspect) / 2;
-    camera.top = frustumHeight / 2;
-    camera.bottom = -frustumHeight / 2;
-    camera.updateProjectionMatrix();
-  }
-  renderer.setSize(window.innerWidth, window.innerHeight);
+// === ENV MAP (REFRAKSI) ===
+cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+  format: THREE.RGBAFormat,
+  generateMipmaps: true,
+  minFilter: THREE.LinearMipmapLinearFilter,
 });
+cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
+scene.add(cubeCamera);
+
+// === LOAD MODELS ===
+const loader = new GLTFLoader();
+
+loader.load("./asset/clarity_bg.glb", (gltf) => {
+  background = gltf.scene;
+  background.scale.set(params.bgScale, params.bgScale, params.bgScale);
+  background.position.set(params.bgPosX, params.bgPosY, params.bgPosZ);
+  scene.add(background);
+});
+
+loader.load("./asset/clarity_keychain.glb", (gltf) => {
+  keychain = gltf.scene;
+  keychain.scale.set(params.keyScale, params.keyScale, params.keyScale);
+  keychai
