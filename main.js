@@ -276,7 +276,7 @@ function setupGUI() {
   // minimal lighting control: global intensity (we added lights manually in init)
   const lightFolder = gui.addFolder("Lighting");
   // manipulate key directional intensity on all clones in sceneMain
-  const lightParams = { intensity: 4 }; // default as in snippet
+  const lightParams = { intensity: 5 }; // default as in snippet
   lightFolder.add(lightParams, "intensity", 0, 8, 0.1).name("Key Intensity").onChange((v) => {
     // find directional lights in sceneMain and set their intensity
     sceneMain.traverse((o) => {
