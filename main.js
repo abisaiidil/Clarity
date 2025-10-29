@@ -18,9 +18,9 @@ let idleRotation = 0;
 // Defaults you requested
 const defaults = {
   // interaction
-  moveStrength: 0.5,
-  lerpSpeed: 0.05,
-  rotationSpeed: 0.01, // used as idle speed multiplier
+  moveStrength: 0.15,
+  lerpSpeed: 0.04,
+  rotationSpeed: 0.004, // used as idle speed multiplier
 
   // background defaults (point 3)
   bgScale: 3.35,
@@ -150,11 +150,11 @@ function init() {
           if (name.includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
-              roughness: 0.05,
+              roughness: 0.4,
               metalness: 0,
               transmission: 1,
               ior: 1.3,
-              thickness: 2,
+              thickness: 0.1,
               envMap: cubeTarget.texture,
               envMapIntensity: 1.0,
               clearcoat: 1,
