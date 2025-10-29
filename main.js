@@ -7,6 +7,7 @@ let cubeCam, cubeTarget;
 let keychainController;
 let bgMain, bgEnv;
 let glassMeshes = [];
+let metalMeshes = [];
 let gui, guiVisible = false;
 
 const cursor = { x: 0, y: 0 };
@@ -14,13 +15,16 @@ let idleRotation = 0;
 let enableRotation = true;
 
 const params = {
-  moveStrength: 0.15,
-  lerpSpeed: 0.04,
-  rotationSpeed: 0.015, // default dari hasil tweak-mu
-  keyLightIntensity: 5,
-  fillLightIntensity: 0.9,
-  rimLightIntensity: 1,
-  ambLightIntensity: 0.5,
+  // 🔧 Interactions
+  moveStrength: 0.25,
+  lerpSpeed: 0.05,
+  rotationSpeed: 0.01,
+
+  // 💡 Lighting intensities
+  keyLightIntensity: 2.6,
+  fillLightIntensity: 1.0,
+  rimLightIntensity: 1.0,
+  ambLightIntensity: 1.0,
 };
 
 let keyLight, fillLight, rimLight, ambLight;
@@ -121,16 +125,17 @@ function init() {
         if (child.isMesh) {
           const name = child.name.toLowerCase();
 
+          // 🧊 GLASS
           if (name.includes("plastik")) {
             const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
               roughness: 0.4,
               metalness: 0,
               transmission: 1,
-              ior: 1.3,
-              thickness: 0.1,
+              ior: 1.33,
+              thickness: 0.05,
               envMap: cubeTarget.texture,
-              envMapIntensity: 1.0,
+              envMapIntensity: 2.0,
               clearcoat: 1,
               clearcoatRoughness: 0.1,
             });
@@ -138,12 +143,17 @@ function init() {
             glassMeshes.push(mat);
           }
 
+          // 🪙 METAL
           if (name.includes("besi")) {
-            child.material = new THREE.MeshPhysicalMaterial({
+            const mat = new THREE.MeshPhysicalMaterial({
               color: 0xffffff,
-              metalness: 1,
+              metalness: 1.0,
               roughness: 0.3,
+              envMap: cubeTarget.texture,
+              envMapIntensity: 1.0,
             });
+            child.material = mat;
+            metalMeshes.push(mat);
           }
         }
       });
@@ -171,38 +181,31 @@ function setupGUI() {
   gui.domElement.classList.add("root");
 
   // 🎛️ Glass Material
-  const mat = glassMeshes[0];
+  const glass = glassMeshes[0];
   const glassFolder = gui.addFolder("Glass Material");
-  glassFolder.add(mat, "transmission", 0, 1, 0.01);
-  glassFolder.add(mat, "ior", 1.0, 2.0, 0.01);
-  glassFolder.add(mat, "thickness", 0.05, 2, 0.05);
-  glassFolder.add(mat, "roughness", 0, 1, 0.01);
-  glassFolder.add(mat, "envMapIntensity", 0, 3, 0.1);
+  glassFolder.add(glass, "transmission", 0, 1, 0.01);
+  glassFolder.add(glass, "ior", 1.0, 2.0, 0.01);
+  glassFolder.add(glass, "thickness", 0.01, 2, 0.01);
+  glassFolder.add(glass, "roughness", 0, 1, 0.01);
+  glassFolder.add(glass, "envMapIntensity", 0, 3, 0.1);
 
-  // 💡 Lighting (masing-masing lampu)
+  // 🪙 Metal Material
+  if (metalMeshes.length > 0) {
+    const metal = metalMeshes[0];
+    const metalFolder = gui.addFolder("Metal Material");
+    metalFolder.add(metal, "metalness", 0, 1, 0.01);
+    metalFolder.add(metal, "roughness", 0, 1, 0.01);
+    metalFolder.add(metal, "envMapIntensity", 0, 3, 0.1);
+  }
+
+  // 💡 Lighting (4 lampu)
   const lightFolder = gui.addFolder("Lighting Controls");
   lightFolder.add(params, "keyLightIntensity", 0, 10, 0.1).name("Key Light").onChange((v) => (keyLight.intensity = v));
   lightFolder.add(params, "fillLightIntensity", 0, 3, 0.1).name("Fill Light").onChange((v) => (fillLight.intensity = v));
   lightFolder.add(params, "rimLightIntensity", 0, 3, 0.1).name("Rim Light").onChange((v) => (rimLight.intensity = v));
   lightFolder.add(params, "ambLightIntensity", 0, 2, 0.1).name("Ambient").onChange((v) => (ambLight.intensity = v));
 
-  // 🔧 Background
-  const bgFolder = gui.addFolder("Background Controls");
-  const bgParams = { z: 0, scale: 3.35 };
-  bgFolder.add(bgParams, "z", -5, 5, 0.1).onChange((v) => {
-    if (bgMain && bgEnv) {
-      bgMain.position.z = v;
-      bgEnv.position.z = v;
-    }
-  });
-  bgFolder.add(bgParams, "scale", 0.5, 10, 0.1).onChange((v) => {
-    if (bgMain && bgEnv) {
-      bgMain.scale.set(v, v, v);
-      bgEnv.scale.set(v, v, v);
-    }
-  });
-
-  // 🔩 Keychain
+  // 🔩 Keychain Interaction
   const keychainFolder = gui.addFolder("Keychain Controls");
   keychainFolder.add(params, "rotationSpeed", 0, 0.05, 0.001).name("Rotation Speed");
   keychainFolder.add(params, "moveStrength", 0, 1, 0.01).name("Move Strength");
