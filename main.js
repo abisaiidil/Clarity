@@ -23,6 +23,7 @@ const params = {
 };
 
 function init() {
+  // --- AMBIL CANVAS DARI HTML ---
   const canvas = document.getElementById("webgl");
 
   // --- SCENE SETUP ---
