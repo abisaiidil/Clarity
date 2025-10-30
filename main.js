@@ -11,14 +11,13 @@ let gui, guiVisible = false;
 const cursor = { x: 0, y: 0 };
 let idleRotation = 0, rotationEnabled = true;
 
-// --- PARAMETER DASAR ---
 const params = {
   rotationSpeed: 0.01,
   moveStrength: 0.25,
   lerpSpeed: 0.05,
 };
 
-// --- INIT SCENE ---
+// --- INIT ---
 function init() {
   const canvas = document.getElementById("webgl");
 
@@ -33,7 +32,7 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // --- LIGHTING ---
+  // LIGHTING
   const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
   keyLight.position.set(3, 4, 5);
   const fillLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -45,7 +44,7 @@ function init() {
   sceneMain.add(keyLight, fillLight, rimLight, ambLight);
   sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
 
-  // --- CUBECAMERA ---
+  // CUBECAMERA
   cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -56,7 +55,7 @@ function init() {
 
   const loader = new GLTFLoader();
 
-  // --- BACKGROUND ---
+  // BACKGROUND
   loader.load("./asset/clarity_bg.glb", (gltf) => {
     bgMain = gltf.scene;
     bgEnv = bgMain.clone();
@@ -64,19 +63,17 @@ function init() {
     bgEnv.scale.set(3.35, 3.35, 3.35);
     bgMain.position.set(0, 0, 0);
     bgEnv.position.set(0, 0, 0);
-
-    bgMain.traverse((child) => {
-      if (child.isMesh) child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
+    bgMain.traverse((c) => {
+      if (c.isMesh) c.material = new THREE.MeshBasicMaterial({ map: c.material.map || null, toneMapped: false });
     });
-    bgEnv.traverse((child) => {
-      if (child.isMesh) child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
+    bgEnv.traverse((c) => {
+      if (c.isMesh) c.material = new THREE.MeshBasicMaterial({ map: c.material.map || null, toneMapped: false });
     });
-
     sceneMain.add(bgMain);
     sceneEnv.add(bgEnv);
   });
 
-  // --- KEYCHAIN ---
+  // KEYCHAIN
   loader.load("./asset/clarity_keychain.glb", (gltf) => {
     const model = gltf.scene;
     sceneMain.add(model);
@@ -122,22 +119,64 @@ function init() {
     animate();
   });
 
-  // --- ICON PATHS ---
+  // ICON DATA (update hasil tweak)
   const iconPaths = [
-    { name: "home", path: "./asset/2_home.glb", x: -0.99, y: 0.49, amp: 0.09 },
-    { name: "keys", path: "./asset/1_keys.glb", x: -0.58, y: 0.9, amp: 0.05 },
-    { name: "locker", path: "./asset/5_locker.glb", x: 0.9, y: -0.45, amp: 0.08 },
-    { name: "backpack", path: "./asset/3_backpack.glb", x: -1.1, y: -0.15, amp: 0.12 },
-    { name: "suitcase", path: "./asset/6_suitcase.glb", x: 1.32, y: 0.05, amp: 0.07 },
-    { name: "bag", path: "./asset/4_bag.glb", x: 0.95, y: 0.69, amp: 0.06 },
+    {
+      name: "keys",
+      path: "./asset/1_keys.glb",
+      pos: { x: 0.12, y: 0.01, z: 0.3 },
+      amp: 0.05,
+      spd: 0.9,
+      color: "#A888B5",
+    },
+    {
+      name: "locker",
+      path: "./asset/5_locker.glb",
+      pos: { x: 0.12, y: 0.19, z: 0.3 },
+      amp: 0.08,
+      spd: 1.1,
+      color: "#FF7BCA",
+    },
+    {
+      name: "home",
+      path: "./asset/2_home.glb",
+      pos: { x: -0.16, y: 0.15, z: 0.3 },
+      amp: 0.09,
+      spd: 1,
+      color: "#FFD6BA",
+    },
+    {
+      name: "suitcase",
+      path: "./asset/6_suitcase.glb",
+      pos: { x: -0.16, y: 0.05, z: 0.3 },
+      amp: 0.07,
+      spd: 0.8,
+      color: "#A594F9",
+    },
+    {
+      name: "bag",
+      path: "./asset/4_bag.glb",
+      pos: { x: -0.06, y: 0.12, z: 0.3 },
+      amp: 0.06,
+      spd: 1.2,
+      color: "#FDB7EA",
+    },
+    {
+      name: "backpack",
+      path: "./asset/3_backpack.glb",
+      pos: { x: 0.12, y: 0.08, z: 0.3 },
+      amp: 0.12,
+      spd: 0.9,
+      color: "#F39E60",
+    },
   ];
 
-  // --- LOAD ICONS ---
+  // LOAD ICONS
   iconPaths.forEach((icon) => {
     loader.load(icon.path, (gltf) => {
       const iconRoot = gltf.scene;
       iconRoot.scale.set(2.5, 2.5, 2.5);
-      iconRoot.position.set(icon.x, icon.y, 0.3);
+      iconRoot.position.set(icon.pos.x, icon.pos.y, icon.pos.z);
 
       const glassMat = new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
@@ -152,21 +191,12 @@ function init() {
         clearcoatRoughness: 0.1,
       });
 
-      let iconMat;
-      const colorMap = {
-        home: "#c585d8",
-        keys: "#e1a06a",
-        locker: "#7281d8",
-        backpack: "#b173cf",
-        suitcase: "#c576a0",
-        bag: "#f0ad76",
-      };
-      iconMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(colorMap[icon.name] || 0xffffff),
-        roughness: 0.2,
-        metalness: 0.2,
+      const iconMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(icon.color),
+        roughness: 0.5,
+        metalness: 0.15,
         envMap: cubeTarget.texture,
-        envMapIntensity: 2,
+        envMapIntensity: 1,
       });
 
       iconRoot.traverse((child) => {
@@ -180,7 +210,7 @@ function init() {
         root: iconRoot,
         loct: iconRoot,
         rot: iconRoot,
-        float: { amplitude: icon.amp, speed: 1 },
+        float: { amplitude: icon.amp, speed: icon.spd },
         mats: { iconMat, glassMat },
       });
       sceneMain.add(iconRoot);
@@ -195,19 +225,17 @@ function init() {
   window.addEventListener("keydown", toggleGUI);
 }
 
-// --- GUI SETUP ---
+// --- GUI ---
 function setupGUI(lights) {
   gui = new GUI({ width: 320 });
   gui.domElement.style.display = "none";
 
-  // Lighting Intensity
   const lightFolder = gui.addFolder("I. Lighting Intensity");
   lightFolder.add(lights.keyLight, "intensity", 0, 10, 0.1).name("Key Light");
   lightFolder.add(lights.rimLight, "intensity", 0, 10, 0.1).name("Rim Light");
   lightFolder.add(lights.fillLight, "intensity", 0, 10, 0.1).name("Fill Light");
   lightFolder.add(lights.ambLight, "intensity", 0, 10, 0.1).name("Ambient Light");
 
-  // Keychain
   const keychainFolder = gui.addFolder("II. Keychain");
   const controlFolder = keychainFolder.addFolder("Control");
   controlFolder.add(keychainController.scale, "x", 0.5, 3, 0.1).name("Scale").onChange((v) => keychainController.scale.set(v, v, v));
@@ -230,7 +258,6 @@ function setupGUI(lights) {
   metalFolder.add(metalMat, "roughness", 0, 1, 0.01);
   metalFolder.add(metalMat, "envMapIntensity", 0, 3, 0.1);
 
-  // Icons
   const iconFolder = gui.addFolder("III. Icons");
   const cubeMat = icons.length > 0 ? icons[0].mats.glassMat : null;
   if (cubeMat) {
@@ -238,31 +265,9 @@ function setupGUI(lights) {
     cubeFolder.add(cubeMat, "thickness", 0, 2, 0.01);
     cubeFolder.add(cubeMat, "roughness", 0, 1, 0.01);
   }
-
-  // each icon
-  icons.forEach((icon) => {
-    const f = iconFolder.addFolder(icon.name.toUpperCase());
-    const pos = f.addFolder("Location");
-    pos.add(icon.loct.position, "x", -2, 2, 0.01);
-    pos.add(icon.loct.position, "y", -2, 2, 0.01);
-    pos.add(icon.loct.position, "z", -1, 2, 0.01);
-    const rot = f.addFolder("Rotation");
-    rot.add(icon.rot.rotation, "x", 0, Math.PI * 2, 0.01);
-    rot.add(icon.rot.rotation, "y", 0, Math.PI * 2, 0.01);
-    rot.add(icon.rot.rotation, "z", 0, Math.PI * 2, 0.01);
-    f.add(icon.root.scale, "x", 0.5, 4, 0.1).name("Scale").onChange((v) => icon.root.scale.set(v, v, v));
-    const floatF = f.addFolder("Float Motion");
-    floatF.add(icon.float, "amplitude", 0, 0.3, 0.01);
-    floatF.add(icon.float, "speed", 0.5, 3, 0.1);
-    const matF = f.addFolder("Material");
-    matF.addColor(icon.mats.iconMat, "color");
-    matF.add(icon.mats.iconMat, "roughness", 0, 1, 0.01);
-    matF.add(icon.mats.iconMat, "metalness", 0, 1, 0.01);
-    matF.add(icon.mats.iconMat, "envMapIntensity", 0, 3, 0.1);
-  });
 }
 
-// --- TOGGLE GUI ---
+// --- TOGGLE ---
 function toggleGUI(e) {
   if (e.key.toLowerCase() === "h" && gui) {
     guiVisible = !guiVisible;
