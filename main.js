@@ -2,44 +2,26 @@ import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
 import GUI from "lil-gui";
 
-let sceneMain, sceneEnv, camera, renderer;
-let cubeCam, cubeTarget;
-let keychainController;
-let bgMain, bgEnv;
-let glassMeshes = [];
-let metalMeshes = [];
-let cubeGlassMaterials = [];
-let iconEntries = [];
+let sceneMain, sceneEnv, camera, renderer, cubeCam, cubeTarget;
+let keychainController, bgMain, bgEnv;
+let glassMeshes = [], metalMeshes = [];
+let icons = [];
 let gui, guiVisible = false;
 
 const cursor = { x: 0, y: 0 };
-let idleRotation = 0;
-let enableRotation = true;
+let idleRotation = 0, rotationEnabled = true;
 
+// --- PARAMETER DASAR ---
 const params = {
+  rotationSpeed: 0.01,
   moveStrength: 0.25,
   lerpSpeed: 0.05,
-  rotationSpeed: 0.01,
-
-  keyLightIntensity: 2.6,
-  fillLightIntensity: 1.0,
-  rimLightIntensity: 1.0,
-  ambLightIntensity: 1.0,
 };
 
-let keyLight, fillLight, rimLight, ambLight;
-
-const iconFiles = [
-  "./asset/1_keys.glb",
-  "./asset/2_home.glb",
-  "./asset/3_backpack.glb",
-  "./asset/4_bag.glb",
-  "./asset/5_locker.glb",
-  "./asset/6_suitcase.glb",
-];
-
+// --- INIT SCENE ---
 function init() {
   const canvas = document.getElementById("webgl");
+
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
   sceneEnv = new THREE.Scene();
@@ -51,13 +33,15 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // --- LIGHTS ---
-  keyLight = new THREE.DirectionalLight(0xffffff, params.keyLightIntensity);
+  // --- LIGHTING ---
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
   keyLight.position.set(3, 4, 5);
-  fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, params.fillLightIntensity);
-  rimLight = new THREE.DirectionalLight(0xffffff, params.rimLightIntensity);
+  const fillLight = new THREE.DirectionalLight(0xffffff, 1);
+  fillLight.position.set(-3, 2, 2);
+  const rimLight = new THREE.DirectionalLight(0xffffff, 1);
   rimLight.position.set(-3, 2, -4);
-  ambLight = new THREE.AmbientLight(0xffffff, params.ambLightIntensity);
+  const ambLight = new THREE.AmbientLight(0xffffff, 1);
+
   sceneMain.add(keyLight, fillLight, rimLight, ambLight);
   sceneEnv.add(keyLight.clone(), fillLight.clone(), rimLight.clone(), ambLight.clone());
 
@@ -75,9 +59,19 @@ function init() {
   // --- BACKGROUND ---
   loader.load("./asset/clarity_bg.glb", (gltf) => {
     bgMain = gltf.scene;
-    bgEnv = bgMain.clone(true);
+    bgEnv = bgMain.clone();
     bgMain.scale.set(3.35, 3.35, 3.35);
     bgEnv.scale.set(3.35, 3.35, 3.35);
+    bgMain.position.set(0, 0, 0);
+    bgEnv.position.set(0, 0, 0);
+
+    bgMain.traverse((child) => {
+      if (child.isMesh) child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
+    });
+    bgEnv.traverse((child) => {
+      if (child.isMesh) child.material = new THREE.MeshBasicMaterial({ map: child.material.map || null, toneMapped: false });
+    });
+
     sceneMain.add(bgMain);
     sceneEnv.add(bgEnv);
   });
@@ -85,140 +79,112 @@ function init() {
   // --- KEYCHAIN ---
   loader.load("./asset/clarity_keychain.glb", (gltf) => {
     const model = gltf.scene;
-    model.scale.set(1.7, 1.7, 1.7);
-    model.position.set(0, 0, 1.12);
     sceneMain.add(model);
 
-    keychainController =
-      model.getObjectByName("Keychain Controler") ||
-      model.getObjectByName("Keychain Controller") ||
-      model;
+    keychainController = model.getObjectByName("Keychain Controler") || model;
+    keychainController.scale.set(1.7, 1.7, 1.7);
+    keychainController.position.z = 1.12;
 
     model.traverse((child) => {
-      const name = (child.name || "").toLowerCase();
-      if (name.includes("plastik")) {
-        const mat = new THREE.MeshPhysicalMaterial({
-          color: 0xffffff,
-          roughness: 0.4,
-          metalness: 0,
-          transmission: 1,
-          ior: 1.33,
-          thickness: 0.05,
-          envMap: cubeTarget.texture,
-          envMapIntensity: 2.0,
-          clearcoat: 1,
-          clearcoatRoughness: 0.1,
-        });
-        child.material = mat;
-        glassMeshes.push(mat);
-      } else if (name.includes("besi")) {
-        const mat = new THREE.MeshPhysicalMaterial({
-          color: 0xffffff,
-          metalness: 1.0,
-          roughness: 0.2,
-          envMap: cubeTarget.texture,
-          envMapIntensity: 2.0,
-        });
-        child.material = mat;
-        metalMeshes.push(mat);
-      }
-    });
+      if (child.isMesh) {
+        const n = child.name.toLowerCase();
 
-    if (glassMeshes.length > 0) setupGUI();
-    animate();
-  });
-
-  // --- ICONS ---
-  const defaultPositions = [
-    [-1.2, 0.9, 0.3], // keys
-    [-0.7, 0.5, 0.3], // home
-    [-0.8, -0.6, 0.3], // backpack
-    [0.9, 0.4, 0.3], // bag
-    [0.8, -0.3, 0.3], // locker
-    [1.1, -0.9, 0.3], // suitcase
-  ];
-
-  iconFiles.forEach((path, idx) => {
-    loader.load(
-      path,
-      (gltf) => {
-        const sceneRoot = gltf.scene;
-        let loct = null;
-        sceneRoot.traverse((o) => {
-          if (!loct && (o.name || "").toLowerCase().startsWith("loct_")) loct = o;
-        });
-        if (!loct) loct = sceneRoot;
-
-        let rot = null;
-        loct.traverse((o) => {
-          if (!rot && (o.name || "").toLowerCase().startsWith("rot_")) rot = o;
-        });
-        if (!rot) rot = loct;
-
-        let iconMesh = null;
-        let iconGlassMesh = null;
-        rot.traverse((m) => {
-          if (m.isMesh) {
-            const nm = (m.name || "").toLowerCase();
-            if (nm.includes("glass_")) iconGlassMesh = m;
-            else if (!iconMesh) iconMesh = m;
-          }
-        });
-
-        loct.position.set(...defaultPositions[idx]);
-        rot.rotation.set(Math.PI / 2, 0, 0); // rot X default
-
-        loct.scale.set(2.5, 2.5, 2.5);
-
-        if (iconGlassMesh) {
-          const matGlass = new THREE.MeshPhysicalMaterial({
+        if (n.includes("plastik")) {
+          const mat = new THREE.MeshPhysicalMaterial({
             color: 0xffffff,
-            roughness: 0.1,
+            roughness: 0.4,
             metalness: 0,
             transmission: 1,
             ior: 1.33,
-            thickness: 0,
+            thickness: 0.05,
             envMap: cubeTarget.texture,
-            envMapIntensity: 2.0,
+            envMapIntensity: 2,
+            clearcoat: 1,
+            clearcoatRoughness: 0.1,
           });
-          iconGlassMesh.material = matGlass;
-          cubeGlassMaterials.push(matGlass);
-        }
-
-        if (iconMesh) {
-          const matIcon = new THREE.MeshPhysicalMaterial({
-            color: new THREE.Color(0xffffff),
+          child.material = mat;
+          glassMeshes.push(mat);
+        } else if (n.includes("besi")) {
+          const mat = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            metalness: 1,
             roughness: 0.2,
-            metalness: 0.1,
             envMap: cubeTarget.texture,
-            envMapIntensity: 2.0,
+            envMapIntensity: 2,
           });
-          iconMesh.material = matIcon;
+          child.material = mat;
+          metalMeshes.push(mat);
         }
+      }
+    });
 
-        sceneMain.add(loct);
-        sceneEnv.add(loct.clone(true));
+    setupGUI({ keyLight, fillLight, rimLight, ambLight });
+    animate();
+  });
 
-        const entry = {
-          name: loct.name || `icon_${idx}`,
-          loct,
-          rot,
-          basePosition: loct.position.clone(),
-          baseY: loct.position.y,
-          iconMesh,
-          iconGlassMesh,
-          floatAmplitude: 0.15 + Math.random() * 0.1,
-          floatSpeed: 0.6 + Math.random() * 0.4,
-          phase: Math.random() * Math.PI * 2,
-          scale: 2.5,
-        };
-        iconEntries.push(entry);
+  // --- ICON PATHS ---
+  const iconPaths = [
+    { name: "home", path: "./asset/2_home.glb", x: -0.99, y: 0.49, amp: 0.09 },
+    { name: "keys", path: "./asset/1_keys.glb", x: -0.58, y: 0.9, amp: 0.05 },
+    { name: "locker", path: "./asset/5_locker.glb", x: 0.9, y: -0.45, amp: 0.08 },
+    { name: "backpack", path: "./asset/3_backpack.glb", x: -1.1, y: -0.15, amp: 0.12 },
+    { name: "suitcase", path: "./asset/6_suitcase.glb", x: 1.32, y: 0.05, amp: 0.07 },
+    { name: "bag", path: "./asset/4_bag.glb", x: 0.95, y: 0.69, amp: 0.06 },
+  ];
 
-        if (gui) addIconGUI(entry);
-      },
-      undefined,
-      (err) => console.error("❌ icon load failed:", path, err)
-    );
+  // --- LOAD ICONS ---
+  iconPaths.forEach((icon) => {
+    loader.load(icon.path, (gltf) => {
+      const iconRoot = gltf.scene;
+      iconRoot.scale.set(2.5, 2.5, 2.5);
+      iconRoot.position.set(icon.x, icon.y, 0.3);
+
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        roughness: 0.1,
+        metalness: 0,
+        transmission: 1,
+        ior: 1.33,
+        thickness: 0,
+        envMap: cubeTarget.texture,
+        envMapIntensity: 2,
+        clearcoat: 1,
+        clearcoatRoughness: 0.1,
+      });
+
+      let iconMat;
+      const colorMap = {
+        home: "#c585d8",
+        keys: "#e1a06a",
+        locker: "#7281d8",
+        backpack: "#b173cf",
+        suitcase: "#c576a0",
+        bag: "#f0ad76",
+      };
+      iconMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(colorMap[icon.name] || 0xffffff),
+        roughness: 0.2,
+        metalness: 0.2,
+        envMap: cubeTarget.texture,
+        envMapIntensity: 2,
+      });
+
+      iconRoot.traverse((child) => {
+        const n = child.name.toLowerCase();
+        if (n.includes("glass")) child.material = glassMat;
+        else if (child.isMesh) child.material = iconMat;
+      });
+
+      icons.push({
+        name: icon.name,
+        root: iconRoot,
+        loct: iconRoot,
+        rot: iconRoot,
+        float: { amplitude: icon.amp, speed: 1 },
+        mats: { iconMat, glassMat },
+      });
+      sceneMain.add(iconRoot);
+    });
   });
 
   window.addEventListener("mousemove", (e) => {
@@ -229,112 +195,114 @@ function init() {
   window.addEventListener("keydown", toggleGUI);
 }
 
-function setupGUI() {
+// --- GUI SETUP ---
+function setupGUI(lights) {
   gui = new GUI({ width: 320 });
-  gui.hide();
+  gui.domElement.style.display = "none";
 
-  if (glassMeshes.length > 0) {
-    const g = glassMeshes[0];
-    const gf = gui.addFolder("Glass Material (Keychain)");
-    gf.add(g, "transmission", 0, 1, 0.01);
-    gf.add(g, "ior", 1.0, 2.0, 0.01);
-    gf.add(g, "thickness", 0.01, 2, 0.01);
-    gf.add(g, "roughness", 0, 1, 0.01);
-    gf.add(g, "envMapIntensity", 0, 3, 0.1);
+  // Lighting Intensity
+  const lightFolder = gui.addFolder("I. Lighting Intensity");
+  lightFolder.add(lights.keyLight, "intensity", 0, 10, 0.1).name("Key Light");
+  lightFolder.add(lights.rimLight, "intensity", 0, 10, 0.1).name("Rim Light");
+  lightFolder.add(lights.fillLight, "intensity", 0, 10, 0.1).name("Fill Light");
+  lightFolder.add(lights.ambLight, "intensity", 0, 10, 0.1).name("Ambient Light");
+
+  // Keychain
+  const keychainFolder = gui.addFolder("II. Keychain");
+  const controlFolder = keychainFolder.addFolder("Control");
+  controlFolder.add(keychainController.scale, "x", 0.5, 3, 0.1).name("Scale").onChange((v) => keychainController.scale.set(v, v, v));
+  controlFolder.add(keychainController.position, "z", -1, 3, 0.01).name("Z Position");
+  controlFolder.add(params, "moveStrength", 0.05, 0.5, 0.01).name("Move Strength");
+  controlFolder.add(params, "lerpSpeed", 0.01, 0.2, 0.01).name("Lerp Speed");
+  controlFolder.add(params, "rotationSpeed", 0.001, 0.05, 0.001).name("Rotation Speed");
+  controlFolder.add({ toggle: () => (rotationEnabled = !rotationEnabled) }, "toggle").name("Toggle Idle Rotation");
+
+  const glassMat = glassMeshes[0];
+  const metalMat = metalMeshes[0];
+  const glassFolder = keychainFolder.addFolder("Glass Material");
+  glassFolder.add(glassMat, "transmission", 0, 1, 0.01);
+  glassFolder.add(glassMat, "ior", 1, 2, 0.01);
+  glassFolder.add(glassMat, "thickness", 0, 5, 0.01);
+  glassFolder.add(glassMat, "roughness", 0, 1, 0.01);
+  glassFolder.add(glassMat, "envMapIntensity", 0, 3, 0.1);
+
+  const metalFolder = keychainFolder.addFolder("Metal Material");
+  metalFolder.add(metalMat, "roughness", 0, 1, 0.01);
+  metalFolder.add(metalMat, "envMapIntensity", 0, 3, 0.1);
+
+  // Icons
+  const iconFolder = gui.addFolder("III. Icons");
+  const cubeMat = icons.length > 0 ? icons[0].mats.glassMat : null;
+  if (cubeMat) {
+    const cubeFolder = iconFolder.addFolder("Glass Cube Material");
+    cubeFolder.add(cubeMat, "thickness", 0, 2, 0.01);
+    cubeFolder.add(cubeMat, "roughness", 0, 1, 0.01);
   }
 
-  if (cubeGlassMaterials.length > 0) {
-    const gm = cubeGlassMaterials[0];
-    const cf = gui.addFolder("Glass Cube (All Icons)");
-    cf.add(gm, "transmission", 0, 1, 0.01);
-    cf.add(gm, "ior", 1.0, 2.0, 0.01);
-    cf.add(gm, "thickness", 0, 2, 0.01);
-    cf.add(gm, "roughness", 0, 1, 0.01);
-    cf.add(gm, "envMapIntensity", 0, 3, 0.1);
-  }
-
-  if (metalMeshes.length > 0) {
-    const m = metalMeshes[0];
-    const mf = gui.addFolder("Metal Material (Keychain)");
-    mf.add(m, "metalness", 0, 1, 0.01);
-    mf.add(m, "roughness", 0, 1, 0.01);
-    mf.add(m, "envMapIntensity", 0, 3, 0.1);
-  }
-
-  iconEntries.forEach(addIconGUI);
+  // each icon
+  icons.forEach((icon) => {
+    const f = iconFolder.addFolder(icon.name.toUpperCase());
+    const pos = f.addFolder("Location");
+    pos.add(icon.loct.position, "x", -2, 2, 0.01);
+    pos.add(icon.loct.position, "y", -2, 2, 0.01);
+    pos.add(icon.loct.position, "z", -1, 2, 0.01);
+    const rot = f.addFolder("Rotation");
+    rot.add(icon.rot.rotation, "x", 0, Math.PI * 2, 0.01);
+    rot.add(icon.rot.rotation, "y", 0, Math.PI * 2, 0.01);
+    rot.add(icon.rot.rotation, "z", 0, Math.PI * 2, 0.01);
+    f.add(icon.root.scale, "x", 0.5, 4, 0.1).name("Scale").onChange((v) => icon.root.scale.set(v, v, v));
+    const floatF = f.addFolder("Float Motion");
+    floatF.add(icon.float, "amplitude", 0, 0.3, 0.01);
+    floatF.add(icon.float, "speed", 0.5, 3, 0.1);
+    const matF = f.addFolder("Material");
+    matF.addColor(icon.mats.iconMat, "color");
+    matF.add(icon.mats.iconMat, "roughness", 0, 1, 0.01);
+    matF.add(icon.mats.iconMat, "metalness", 0, 1, 0.01);
+    matF.add(icon.mats.iconMat, "envMapIntensity", 0, 3, 0.1);
+  });
 }
 
-function addIconGUI(entry) {
-  const f = gui.addFolder(`Icon: ${entry.name}`);
-
-  const pos = {
-    x: entry.loct.position.x,
-    y: entry.baseY,
-    z: entry.loct.position.z,
-  };
-  f.add(pos, "x", -5, 5, 0.01).onChange((v) => (entry.loct.position.x = v));
-  f.add(pos, "y", -3, 3, 0.01).onChange((v) => (entry.baseY = v));
-  f.add(pos, "z", -5, 5, 0.01).onChange((v) => (entry.loct.position.z = v));
-
-  const rot = {
-    x: Math.PI / 2,
-    y: 0,
-    z: 0,
-  };
-  f.add(rot, "x", -Math.PI, Math.PI, 0.01).onChange((v) => (entry.rot.rotation.x = v));
-  f.add(rot, "y", -Math.PI, Math.PI, 0.01).onChange((v) => (entry.rot.rotation.y = v));
-  f.add(rot, "z", -Math.PI, Math.PI, 0.01).onChange((v) => (entry.rot.rotation.z = v));
-
-  f.add(entry, "scale", 0.1, 5, 0.01).onChange((v) => entry.loct.scale.set(v, v, v));
-  f.add(entry, "floatAmplitude", 0, 1, 0.01);
-  f.add(entry, "floatSpeed", 0, 2, 0.01);
-}
-
+// --- TOGGLE GUI ---
 function toggleGUI(e) {
-  if (e.key && e.key.toLowerCase() === "h" && gui) {
+  if (e.key.toLowerCase() === "h" && gui) {
     guiVisible = !guiVisible;
     gui.domElement.style.display = guiVisible ? "block" : "none";
   }
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-
-  if (keychainController) {
-    if (enableRotation) {
-      idleRotation += params.rotationSpeed;
-      keychainController.rotation.y = idleRotation;
-      keychainController.rotation.x = 1;
-      keychainController.rotation.z = 0.6;
-    }
-
-    const targetX = cursor.x * params.moveStrength;
-    const targetY = cursor.y * params.moveStrength;
-    keychainController.position.x += (targetX - keychainController.position.x) * params.lerpSpeed;
-    keychainController.position.y += (targetY - keychainController.position.y) * params.lerpSpeed;
-  }
-
-  const t = performance.now() / 1000;
-  iconEntries.forEach((entry) => {
-    const y = entry.baseY + Math.sin(t * entry.floatSpeed + entry.phase) * entry.floatAmplitude;
-    entry.loct.position.y = y;
-  });
-
-  if (keychainController) keychainController.visible = false;
-  iconEntries.forEach((entry) => (entry.loct.visible = false));
-  cubeCam.update(renderer, sceneEnv);
-  if (keychainController) keychainController.visible = true;
-  iconEntries.forEach((entry) => (entry.loct.visible = true));
-
-  renderer.render(sceneMain, camera);
-}
-
+// --- RESIZE ---
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// --- LOOP ---
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (keychainController) {
+    if (rotationEnabled) idleRotation += params.rotationSpeed;
+    keychainController.rotation.y = idleRotation;
+    keychainController.rotation.x = 1;
+    keychainController.rotation.z = 0.6;
+
+    const targetX = cursor.x * params.moveStrength;
+    const targetY = cursor.y * params.moveStrength;
+    keychainController.position.x += (targetX - keychainController.position.x) * params.lerpSpeed;
+    keychainController.position.y += (targetY - keychainController.position.y) * params.lerpSpeed;
+
+    keychainController.visible = false;
+    cubeCam.update(renderer, sceneEnv);
+    keychainController.visible = true;
+  }
+
+  const t = performance.now() * 0.001;
+  icons.forEach((icon) => {
+    icon.loct.position.y += Math.sin(t * icon.float.speed) * icon.float.amplitude * 0.02;
+  });
+
+  renderer.render(sceneMain, camera);
+}
+
 init();
-setupGUI();
-animate();
