@@ -183,4 +183,127 @@ function init() {
   Promise.all(loaderPromises).then(() => {
     icons.forEach((icon) => {
       icon.root.traverse((child) => {
-        i
+        if (child.isMesh && child.name.toLowerCase().includes("glass")) {
+          child.material = sharedGlassMat;
+        }
+      });
+    });
+    rebuildIconGUI();
+  });
+
+  // LISTENERS
+  window.addEventListener("mousemove", (e) => {
+    cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
+    cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
+  });
+  window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", toggleGUI);
+}
+
+// --- GUI ---
+function setupGUI(lights) {
+  gui = new GUI({ width: 320 });
+  gui.domElement.style.display = "none";
+
+  const lightFolder = gui.addFolder("I. Lighting Intensity");
+  lightFolder.add(lights.keyLight, "intensity", 0, 10, 0.1).name("Key Light");
+  lightFolder.add(lights.rimLight, "intensity", 0, 10, 0.1).name("Rim Light");
+  lightFolder.add(lights.fillLight, "intensity", 0, 10, 0.1).name("Fill Light");
+  lightFolder.add(lights.ambLight, "intensity", 0, 10, 0.1).name("Ambient Light");
+
+  const keychainFolder = gui.addFolder("II. Keychain");
+  const controlFolder = keychainFolder.addFolder("Control");
+  controlFolder.add(keychainController.scale, "x", 0.5, 3, 0.1).name("Scale").onChange((v) => keychainController.scale.set(v, v, v));
+  controlFolder.add(keychainController.position, "z", -1, 3, 0.01).name("Z Position");
+  controlFolder.add(params, "moveStrength", 0.05, 0.5, 0.01).name("Move Strength");
+  controlFolder.add(params, "lerpSpeed", 0.01, 0.2, 0.01).name("Lerp Speed");
+  controlFolder.add(params, "rotationSpeed", 0.001, 0.05, 0.001).name("Rotation Speed");
+  controlFolder.add({ toggle: () => (rotationEnabled = !rotationEnabled) }, "toggle").name("Toggle Idle Rotation");
+
+  const glassMat = glassMeshes[0];
+  const metalMat = metalMeshes[0];
+  const glassFolder = keychainFolder.addFolder("Glass Material");
+  glassFolder.add(glassMat, "transmission", 0, 1, 0.01);
+  glassFolder.add(glassMat, "ior", 1, 2, 0.01);
+  glassFolder.add(glassMat, "thickness", 0, 5, 0.01);
+  glassFolder.add(glassMat, "roughness", 0, 1, 0.01);
+  glassFolder.add(glassMat, "envMapIntensity", 0, 3, 0.1);
+
+  const metalFolder = keychainFolder.addFolder("Metal Material");
+  metalFolder.add(metalMat, "roughness", 0, 1, 0.01);
+  metalFolder.add(metalMat, "envMapIntensity", 0, 3, 0.1);
+}
+
+// --- ICON GUI BUILDER ---
+function rebuildIconGUI() {
+  const iconFolder = gui.addFolder("III. Icons");
+  const cubeFolder = iconFolder.addFolder("Glass Cube Material (Shared)");
+  cubeFolder.add(sharedGlassMat, "thickness", 0, 2, 0.01);
+  cubeFolder.add(sharedGlassMat, "roughness", 0, 1, 0.01);
+
+  icons.forEach((icon) => {
+    const f = iconFolder.addFolder(icon.name.toUpperCase());
+    const pos = f.addFolder("Location");
+    pos.add(icon.loct.position, "x", -2, 2, 0.01);
+    pos.add(icon.loct.position, "y", -2, 2, 0.01);
+    pos.add(icon.loct.position, "z", -1, 2, 0.01);
+    const rot = f.addFolder("Rotation");
+    rot.add(icon.rot.rotation, "x", 0, Math.PI * 2, 0.01);
+    rot.add(icon.rot.rotation, "y", 0, Math.PI * 2, 0.01);
+    rot.add(icon.rot.rotation, "z", 0, Math.PI * 2, 0.01);
+    f.add(icon.root.scale, "x", 0.5, 4, 0.1).name("Scale").onChange((v) => icon.root.scale.set(v, v, v));
+    const floatF = f.addFolder("Float Motion");
+    floatF.add(icon.float, "amplitude", 0, 0.3, 0.01);
+    floatF.add(icon.float, "speed", 0.5, 3, 0.1);
+    const matF = f.addFolder("Material");
+    matF.addColor(icon.mats.iconMat, "color");
+    matF.add(icon.mats.iconMat, "roughness", 0, 1, 0.01);
+    matF.add(icon.mats.iconMat, "metalness", 0, 1, 0.01);
+    matF.add(icon.mats.iconMat, "envMapIntensity", 0, 3, 0.1);
+  });
+}
+
+// --- TOGGLE GUI ---
+function toggleGUI(e) {
+  if (e.key.toLowerCase() === "h" && gui) {
+    guiVisible = !guiVisible;
+    gui.domElement.style.display = guiVisible ? "block" : "none";
+  }
+}
+
+// --- RESIZE ---
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// --- LOOP ---
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (keychainController) {
+    if (rotationEnabled) idleRotation += params.rotationSpeed;
+    keychainController.rotation.y = idleRotation;
+    keychainController.rotation.x = 1;
+    keychainController.rotation.z = 0.6;
+
+    const targetX = cursor.x * params.moveStrength;
+    const targetY = cursor.y * params.moveStrength;
+    keychainController.position.x += (targetX - keychainController.position.x) * params.lerpSpeed;
+    keychainController.position.y += (targetY - keychainController.position.y) * params.lerpSpeed;
+
+    keychainController.visible = false;
+    cubeCam.update(renderer, sceneEnv);
+    keychainController.visible = true;
+  }
+
+  const t = performance.now() * 0.001;
+  icons.forEach((icon) => {
+    icon.loct.position.y += Math.sin(t * icon.float.speed) * icon.float.amplitude * 0.02;
+  });
+
+  renderer.render(sceneMain, camera);
+}
+
+init();
