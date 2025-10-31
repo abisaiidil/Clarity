@@ -3,18 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clarity — Update Final</title>
+  <title>Clarity — Update 80</title>
   <style>
     html,body { height:100%; margin:0; background:#fff; overflow:hidden; }
     canvas#webgl { display:block; width:100%; height:100vh; }
-    /* pastikan gui di atas */
-    .dg { z-index:9999 !important; }
+    .dg { z-index:9999 !important; } /* GUI always on top */
   </style>
 </head>
 <body>
   <canvas id="webgl"></canvas>
 
-  <!-- importmap: gunakan modul ESM dari CDN (sesuai Decision boundary) -->
+  <!-- importmap -->
   <script type="importmap">
   {
     "imports": {
@@ -26,6 +25,6 @@
   }
   </script>
 
-  <script type="module" src="./main.js?v=final"></script>
+  <script type="module" src="./main.js?v=80"></script>
 </body>
 </html>
