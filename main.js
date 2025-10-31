@@ -1,7 +1,7 @@
-// update 78.1 – lighting fix + full realism tuning
+// update 79 – modern lighting fix + GUI sync
 import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
-import { RectAreaLightUniformsLib } from "RectAreaLightUniformsLib"; // perbaikan penting
+import { RectAreaLightUniformsLib } from "RectAreaLightUniformsLib";
 import GUI from "lil-gui";
 
 let renderer, sceneMain, sceneEnv, camera;
@@ -13,45 +13,44 @@ let gui, guiVisible = false;
 let frameCount = 0;
 let rotationEnabled = true;
 
-// parameter interaksi dasar
+// === Parameter global ===
 const params = {
   rotationSpeed: 0.01,
   moveStrength: 0.15,
   lerpSpeed: 0.05,
-  toneExposure: 1.0
+  toneExposure: 1.0,
+  keychainZ: 1.3
 };
 
-// parameter perf/envmap
 const CUBE_RESOLUTION = 512;
 const CUBE_UPDATE_INTERVAL = 12;
 const ICON_STANDARD_SCALE = 2.5;
 const ICON_STANDARD_Z = 0.3;
 const cursor = { x: 0, y: 0 };
 
-// ====== INITIALIZATION ======
+// === INIT ===
 function init() {
   const canvas = document.getElementById("webgl");
 
-  // Renderer setup
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.physicallyCorrectLights = true;
-  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  // ✅ Modern lighting system (no warnings)
+  renderer.useLegacyLights = false;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = params.toneExposure;
   renderer.shadowMap.enabled = false;
 
-  // Scene setup
   sceneMain = new THREE.Scene();
   sceneMain.background = new THREE.Color(0xffffff);
   sceneEnv = new THREE.Scene();
 
-  // Camera
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 0, 3);
 
-  // Cube Camera (environment reflection)
+  // --- Cube Camera ---
   cubeTarget = new THREE.WebGLCubeRenderTarget(CUBE_RESOLUTION, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
@@ -60,30 +59,26 @@ function init() {
   cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
   sceneEnv.add(cubeCam);
 
-  // ====== LIGHTING (Realistic two-light system) ======
-  RectAreaLightUniformsLib.init(); // aktifkan uniform rect area light
+  // === LIGHTS ===
+  RectAreaLightUniformsLib.init();
 
-  // Key light kecil di atas depan (arah miring ke bawah)
-  const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1);
   keyLight.position.set(2, 3, 2);
   keyLight.target.position.set(0, 0, 0);
   sceneMain.add(keyLight);
   sceneMain.add(keyLight.target);
 
-  // Front soft light — simulasi area besar dari depan scene
   const frontRect = new THREE.RectAreaLight(0xffffff, 1.6, 8, 4);
   frontRect.position.set(0, 0.5, 3);
   frontRect.lookAt(0, 0, 0);
   sceneMain.add(frontRect);
 
-  // Ambient Light — tambahan cahaya lembut
-  const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+  const ambient = new THREE.AmbientLight(0xffffff, 1);
   sceneMain.add(ambient);
 
-  // tambahkan ke environment juga agar cubeCam menangkap cahaya sama
   sceneEnv.add(keyLight.clone(), frontRect.clone(), ambient.clone());
 
-  // ====== BACKGROUND ======
+  // === BACKGROUND ===
   const loader = new GLTFLoader();
   loader.load("./asset/clarity_bg.glb", (gltf) => {
     const bg = gltf.scene;
@@ -101,14 +96,14 @@ function init() {
     sceneEnv.add(bg.clone());
   });
 
-  // ====== KEYCHAIN ======
+  // === KEYCHAIN ===
   loader.load("./asset/clarity_keychain.glb", (gltf) => {
     const model = gltf.scene;
     sceneMain.add(model);
 
     keychainController = model.getObjectByName("Keychain Controler") || model;
     keychainController.scale.set(1.7, 1.7, 1.7);
-    keychainController.position.z = 1.3;
+    keychainController.position.z = params.keychainZ;
 
     model.traverse((child) => {
       if (child.isMesh) {
@@ -139,7 +134,7 @@ function init() {
     });
   });
 
-  // ====== SHARED GLASS MATERIAL FOR ICON CUBES ======
+  // === SHARED GLASS CUBE MATERIAL ===
   sharedGlassMat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     roughness: 0.2,
@@ -153,7 +148,7 @@ function init() {
     clearcoatRoughness: 0.08
   });
 
-  // ====== LOAD ICONS ======
+  // === ICONS ===
   const iconData = [
     { name: "keys", path: "./asset/1_keys.glb", pos:{x:0.12,y:0.01,z:0.3}, amp:0.05, spd:0.9, color:"#A888B5" },
     { name: "locker", path: "./asset/5_locker.glb", pos:{x:0.12,y:0.19,z:0.3}, amp:0.08, spd:1.1, color:"#FF7BCA" },
@@ -167,7 +162,7 @@ function init() {
     buildGUI({ keyLight, frontRect, ambient });
   });
 
-  // ====== EVENTS ======
+  // === EVENTS ===
   window.addEventListener("mousemove", (e) => {
     cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
     cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
@@ -180,7 +175,7 @@ function init() {
   animate();
 }
 
-// ====== LOAD ICON FUNCTION ======
+// === LOAD ICON ===
 function loadIcon(loader, ic) {
   return new Promise((resolve) => {
     loader.load(ic.path, (gltf) => {
@@ -209,7 +204,6 @@ function loadIcon(loader, ic) {
       icons.push({
         name: ic.name,
         loct: root,
-        rot: root,
         float: { amplitude: ic.amp, speed: ic.spd },
         mats: { iconMat: iconColorMat }
       });
@@ -220,34 +214,37 @@ function loadIcon(loader, ic) {
   });
 }
 
-// ====== GUI BUILDER ======
+// === GUI ===
 function buildGUI(lights) {
   gui = new GUI({ width: 320 });
   gui.domElement.style.display = "none";
 
-  const lightingFolder = gui.addFolder("Lighting");
-  lightingFolder.add(lights.keyLight, "intensity", 0, 5, 0.05).name("Key Light");
-  lightingFolder.add(lights.frontRect, "intensity", 0, 5, 0.05).name("Front Light");
-  lightingFolder.add(lights.ambient, "intensity", 0, 3, 0.05).name("Ambient");
-  lightingFolder.add(renderer, "toneMappingExposure", 0.2, 2.5, 0.01).name("Exposure");
+  const lightFolder = gui.addFolder("Lighting Intensity");
+  lightFolder.add(lights.keyLight, "intensity", 0, 5, 0.05).name("Key Light");
+  lightFolder.add(lights.frontRect, "intensity", 0, 5, 0.05).name("Front Light");
+  lightFolder.add(lights.ambient, "intensity", 0, 3, 0.05).name("Ambient");
+  lightFolder.add(renderer, "toneMappingExposure", 0.2, 2.5, 0.01).name("Exposure");
 
-  const keychainFolder = gui.addFolder("Keychain Control");
-  keychainFolder.add(params, "moveStrength", 0.05, 0.5, 0.01);
-  keychainFolder.add(params, "lerpSpeed", 0.01, 0.12, 0.005);
-  keychainFolder.add(params, "rotationSpeed", 0.001, 0.03, 0.001);
-  keychainFolder.add({ toggle: () => rotationEnabled = !rotationEnabled }, "toggle").name("Toggle Idle");
+  const keychainFolder = gui.addFolder("Keychain");
+  const ctrlFolder = keychainFolder.addFolder("Control");
+  ctrlFolder.add(params, "keychainZ", 0.5, 2, 0.01).onChange(v => keychainController.position.z = v);
+  ctrlFolder.add(params, "moveStrength", 0.05, 0.5, 0.01);
+  ctrlFolder.add(params, "lerpSpeed", 0.01, 0.12, 0.005);
+  ctrlFolder.add(params, "rotationSpeed", 0.001, 0.03, 0.001);
+  ctrlFolder.add({ toggle: () => rotationEnabled = !rotationEnabled }, "toggle").name("Toggle Idle");
 
-  const cubeGlassFolder = gui.addFolder("Icon Glass (Shared)");
+  const cubeGlassFolder = keychainFolder.addFolder("Glass Material");
   cubeGlassFolder.add(sharedGlassMat, "roughness", 0, 1, 0.01);
   cubeGlassFolder.add(sharedGlassMat, "thickness", 0, 1, 0.01);
   cubeGlassFolder.add(sharedGlassMat, "envMapIntensity", 0, 3, 0.1);
 
   icons.forEach(ic => {
     const f = gui.addFolder(ic.name.toUpperCase());
-    f.add(ic.loct.position, "x", -2, 2, 0.01);
-    f.add(ic.loct.position, "y", -2, 2, 0.01);
-    f.add(ic.loct.position, "z", -1, 2, 0.01);
-    const floatF = f.addFolder("Float");
+    const posF = f.addFolder("Position");
+    posF.add(ic.loct.position, "x", -2, 2, 0.01);
+    posF.add(ic.loct.position, "y", -2, 2, 0.01);
+    posF.add(ic.loct.position, "z", -1, 2, 0.01);
+    const floatF = f.addFolder("Float Motion");
     floatF.add(ic.float, "amplitude", 0, 0.3, 0.01);
     floatF.add(ic.float, "speed", 0.2, 2, 0.01);
     const matF = f.addFolder("Material");
@@ -257,19 +254,19 @@ function buildGUI(lights) {
   });
 }
 
-// ====== ANIMATION LOOP ======
+// === ANIMATE ===
 function animate() {
   requestAnimationFrame(animate);
+
   if (keychainController) {
     if (rotationEnabled) keychainController.rotation.y += params.rotationSpeed;
     keychainController.rotation.x = 1;
     keychainController.rotation.z = 0.6;
-
     const targetX = cursor.x * params.moveStrength;
     const targetY = cursor.y * params.moveStrength;
     keychainController.position.x += (targetX - keychainController.position.x) * params.lerpSpeed;
     keychainController.position.y += (targetY - keychainController.position.y) * params.lerpSpeed;
-
+    keychainController.position.z = params.keychainZ;
     frameCount++;
     if (frameCount % CUBE_UPDATE_INTERVAL === 0) {
       keychainController.visible = false;
