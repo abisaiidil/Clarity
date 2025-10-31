@@ -3,18 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clarity — Update 78</title>
+  <title>Clarity — Update 78.1</title>
   <style>
-    html,body { height:100%; margin:0; background:#fff; }
-    #webgl { width:100%; height:100vh; display:block; }
-    /* small styling so GUI doesn't overlap layout too aggressively */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    #webgl {
+      width: 100%;
+      height: 100vh;
+      display: block;
+    }
     .dg { z-index: 9999; }
   </style>
 </head>
 <body>
   <canvas id="webgl"></canvas>
 
-  <!-- importmap supaya import 'three' / 'GLTFLoader' / 'lil-gui' bekerja di browser tanpa bundler -->
+  <!-- Importmap agar module imports berjalan lancar di browser -->
   <script type="importmap">
   {
     "imports": {
@@ -26,6 +34,6 @@
   }
   </script>
 
-  <script type="module" src="./main.js?v=78"></script>
+  <script type="module" src="./main.js?v=78.1"></script>
 </body>
 </html>
