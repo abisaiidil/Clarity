@@ -1,4 +1,4 @@
-// main.js — Update 86
+// main.js — Update 87
 import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
 import { RGBELoader } from "RGBELoader";
@@ -12,7 +12,7 @@ let clock = new THREE.Clock();
 
 const canvas = document.getElementById("webgl");
 
-// PARAMS default
+// PARAMS
 const PARAMS = {
   moveStrength: 0.15,
   lerpSpeed: 0.05,
@@ -41,12 +41,13 @@ const PARAMS = {
   metal_metalness: 1.0,
   metal_envIntensity: 2.5,
 
-  // camera
-  cameraZoomMultiplier: 1.0,
+  // background
+  bgScale: 4.5,
+  bgZ: -1.0,
 
-  // background manual controls
-  bgScale: 3.5,
-  bgZ: -2.5
+  // keychain transform
+  keychainScale: 1.7,
+  keychainZ: 1.3
 };
 
 const cursor = { x: 0, y: 0 };
@@ -74,26 +75,23 @@ function init() {
 
   pmremGenerator = new THREE.PMREMGenerator(renderer);
 
-  // Lights
+  // Lighting
   keyLight = new THREE.DirectionalLight(0xffffff, PARAMS.keyLight);
   keyLight.position.set(3, 4, 5);
-
   fillLight = new THREE.DirectionalLight(0xffffff, PARAMS.fillLight);
   fillLight.position.set(-3, 2, 2);
-
   rimLight = new THREE.DirectionalLight(0xffffff, PARAMS.rimLight);
   rimLight.position.set(-3, 2, -4);
-
   areaLight = new THREE.RectAreaLight(0xffffff, PARAMS.areaLight, 0.6, 0.6);
   areaLight.position.set(1.4, 1.4, 1.2);
   areaLight.lookAt(0, 0, 0);
-
   ambientLight = new THREE.AmbientLight(0xffffff, PARAMS.ambientLight);
   scene.add(keyLight, fillLight, rimLight, areaLight, ambientLight);
 
   // Loaders
   const loader = new GLTFLoader();
 
+  // background
   loader.load("./asset/clarity_bg.glb", (g) => {
     bgMain = g.scene;
     bgMain.traverse((c) => {
@@ -111,9 +109,11 @@ function init() {
     scene.add(bgMain);
   });
 
+  // keychain
   loader.load("./asset/clarity_keychain.glb", (g) => {
     const model = g.scene;
-    model.scale.set(1.7, 1.7, 1.7);
+    model.scale.setScalar(PARAMS.keychainScale);
+    model.position.z = PARAMS.keychainZ;
     scene.add(model);
     keychainController = model.getObjectByName("Keychain Controler") || model;
 
@@ -150,6 +150,7 @@ function init() {
     });
   });
 
+  // HDRI
   if (PARAMS.hdri) {
     const rgbe = new RGBELoader();
     rgbe.setPath("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/");
@@ -174,26 +175,10 @@ function onMouseMove(e) {
   cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
   cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
 }
-
 function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-}
-
-function fitBackgroundToViewport() {
-  if (!bgMain) return;
-  const box = new THREE.Box3().setFromObject(bgMain);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  const viewportHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * Math.abs(camera.position.z);
-  const targetHeight = viewportHeight * 0.9;
-  if (size.y > 0) {
-    const scaleFactor = targetHeight / size.y;
-    bgMain.scale.setScalar(scaleFactor);
-    PARAMS.bgScale = scaleFactor;
-  }
-  bgMain.position.z = PARAMS.bgZ;
 }
 
 let gui;
@@ -208,11 +193,20 @@ function createGUI() {
   fLight.add(PARAMS, "ambientLight", 0, 2, 0.01).onChange((v) => (ambientLight.intensity = v));
   fLight.open();
 
-  const fKC = gui.addFolder("Keychain");
+  const fKC = gui.addFolder("Keychain Controls");
   fKC.add(PARAMS, "rotationSpeed", 0, 0.05, 0.001);
   fKC.add(PARAMS, "moveStrength", 0, 1, 0.01);
   fKC.add(PARAMS, "lerpSpeed", 0.01, 0.2, 0.005);
   fKC.open();
+
+  const fKT = gui.addFolder("Keychain Transform");
+  fKT.add(PARAMS, "keychainScale", 0.5, 5, 0.01).onChange((v) => {
+    if (keychainController) keychainController.scale.setScalar(v);
+  });
+  fKT.add(PARAMS, "keychainZ", -2, 3, 0.01).onChange((v) => {
+    if (keychainController) keychainController.position.z = v;
+  });
+  fKT.open();
 
   const fGlass = gui.addFolder("Glass Material (Keychain)");
   fGlass.add(PARAMS, "glass_roughness", 0, 1, 0.01).onChange((v) => glassMaterials.forEach((m) => (m.roughness = v)));
@@ -227,7 +221,6 @@ function createGUI() {
   const fBG = gui.addFolder("Background Controls");
   fBG.add(PARAMS, "bgScale", 0.5, 10, 0.01).onChange((v) => bgMain && bgMain.scale.setScalar(v));
   fBG.add(PARAMS, "bgZ", -10, 2, 0.01).onChange((v) => bgMain && (bgMain.position.z = v));
-  fBG.add({ applyFit: () => fitBackgroundToViewport() }, "applyFit").name("Apply Fit");
   fBG.open();
 }
 
