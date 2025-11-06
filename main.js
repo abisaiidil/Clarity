@@ -1,247 +1,303 @@
-// main.js — Update 87
 import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
-import { RGBELoader } from "RGBELoader";
 import GUI from "lil-gui";
 
-let renderer, scene, camera;
-let keychainController = null;
-let bgMain = null;
-let pmremGenerator;
-let clock = new THREE.Clock();
-
-const canvas = document.getElementById("webgl");
-
-// PARAMS
-const PARAMS = {
-  moveStrength: 0.15,
-  lerpSpeed: 0.05,
-  rotationSpeed: 0.01,
-  pauseIdle: false,
-
-  // lighting
-  hdri: true,
-  exposure: 0.9,
-  keyLight: 0.8,
-  fillLight: 0.5,
-  rimLight: 1.2,
-  areaLight: 0.9,
-  ambientLight: 0.35,
-
-  // glass
-  glass_roughness: 0.25,
-  glass_transmission: 1.0,
-  glass_ior: 1.45,
-  glass_thickness: 0.25,
-  glass_attenuationDistance: 0.8,
-  glass_envIntensity: 2.0,
-
-  // metal
-  metal_roughness: 0.15,
-  metal_metalness: 1.0,
-  metal_envIntensity: 2.5,
-
-  // background
-  bgScale: 4.5,
-  bgZ: -1.0,
-
-  // keychain transform
-  keychainScale: 1.7,
-  keychainZ: 1.3
-};
+let sceneMain, sceneEnv, camera, renderer;
+let cubeCam, cubeTarget;
+let bgMain, bgEnv, keychainController;
+let glassMeshes = [], metalMeshes = [];
+let gui, guiVisible = false;
 
 const cursor = { x: 0, y: 0 };
-let idleRot = 0;
+let idleRotation = 0;
+let isIdlePaused = false;
 
-let keyLight, fillLight, rimLight, areaLight, ambientLight;
-const glassMaterials = [];
-const metalMaterials = [];
+// baseline (from your last tweaks)
+const baseline = {
+  bgScale: 4.5,
+  bgZ: -1,
+  keyScale: 2.75,
+  keyZ: 0.2
+};
+
+// animation params
+const anim = { moveStrength: 0.15, lerpSpeed: 0.05, rotationSpeed: 0.01 };
 
 function init() {
-  renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    alpha: true
-  });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const canvas = document.getElementById("webgl");
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = PARAMS.exposure;
 
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 200);
+  sceneMain = new THREE.Scene();
+  sceneMain.background = new THREE.Color(0xffffff);
+  sceneEnv = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+  );
   camera.position.set(0, 0, 3);
 
-  pmremGenerator = new THREE.PMREMGenerator(renderer);
-
-  // Lighting
-  keyLight = new THREE.DirectionalLight(0xffffff, PARAMS.keyLight);
+  // lighting
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1);
   keyLight.position.set(3, 4, 5);
-  fillLight = new THREE.DirectionalLight(0xffffff, PARAMS.fillLight);
-  fillLight.position.set(-3, 2, 2);
-  rimLight = new THREE.DirectionalLight(0xffffff, PARAMS.rimLight);
+  const rimLight = new THREE.DirectionalLight(0xffffff, 3.5);
   rimLight.position.set(-3, 2, -4);
-  areaLight = new THREE.RectAreaLight(0xffffff, PARAMS.areaLight, 0.6, 0.6);
-  areaLight.position.set(1.4, 1.4, 1.2);
-  areaLight.lookAt(0, 0, 0);
-  ambientLight = new THREE.AmbientLight(0xffffff, PARAMS.ambientLight);
-  scene.add(keyLight, fillLight, rimLight, areaLight, ambientLight);
+  const fillLight = new THREE.HemisphereLight(0xf5f5f5, 0xcccccc, 1.5);
+  const ambLight = new THREE.AmbientLight(0xffffff, 1);
+  sceneMain.add(keyLight, rimLight, fillLight, ambLight);
+  sceneEnv.add(keyLight.clone(), rimLight.clone(), fillLight.clone(), ambLight.clone());
 
-  // Loaders
+  // cube camera
+  cubeTarget = new THREE.WebGLCubeRenderTarget(1024, {
+    format: THREE.RGBAFormat,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter
+  });
+  cubeCam = new THREE.CubeCamera(0.1, 100, cubeTarget);
+  sceneEnv.add(cubeCam);
+
   const loader = new GLTFLoader();
 
-  // background
-  loader.load("./asset/clarity_bg.glb", (g) => {
-    bgMain = g.scene;
-    bgMain.traverse((c) => {
-      if (c.isMesh) {
-        const m = c.material;
-        c.material = new THREE.MeshBasicMaterial({
-          map: m.map || null,
-          toneMapped: false
-        });
-        c.material.map && (c.material.map.encoding = THREE.sRGBEncoding);
-      }
-    });
-    bgMain.scale.setScalar(PARAMS.bgScale);
-    bgMain.position.z = PARAMS.bgZ;
-    scene.add(bgMain);
+  // load bg
+  loader.load(
+    "./asset/clarity_bg.glb",
+    (gltf) => {
+      bgMain = gltf.scene;
+      bgEnv = bgMain.clone();
+      sceneMain.add(bgMain);
+      sceneEnv.add(bgEnv);
+      applyBGScale();
+      bgMain.position.z = baseline.bgZ;
+      bgEnv.position.z = baseline.bgZ;
+
+      bgMain.traverse((child) => {
+        if (child.isMesh)
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false
+          });
+      });
+      bgEnv.traverse((child) => {
+        if (child.isMesh)
+          child.material = new THREE.MeshBasicMaterial({
+            map: child.material.map || null,
+            toneMapped: false
+          });
+      });
+      console.log("✅ clarity_bg.glb loaded");
+    },
+    undefined,
+    (e) => console.error("❌ BG load fail:", e)
+  );
+
+  // load keychain
+  loader.load(
+    "./asset/clarity_keychain.glb",
+    (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(baseline.keyScale, baseline.keyScale, baseline.keyScale);
+      model.position.z = baseline.keyZ;
+      sceneMain.add(model);
+
+      keychainController =
+        model.getObjectByName("Keychain Controller") ||
+        model.getObjectByName("Keychain Controler") ||
+        model;
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          const n = child.name.toLowerCase();
+
+          // glass
+          if (n.includes("plastik")) {
+            const mat = new THREE.MeshPhysicalMaterial({
+              color: 0xffffff,
+              roughness: 0.4,
+              metalness: 0,
+              transmission: 1,
+              ior: 1.33,
+              thickness: 0.05,
+              envMap: cubeTarget.texture,
+              envMapIntensity: 2,
+              clearcoat: 1,
+              clearcoatRoughness: 0.1
+            });
+            child.material = mat;
+            glassMeshes.push(mat);
+          }
+
+          // metal
+          if (n.includes("besi")) {
+            const mat = new THREE.MeshPhysicalMaterial({
+              color: 0xffffff,
+              metalness: 1,
+              roughness: 0.2,
+              envMap: cubeTarget.texture,
+              envMapIntensity: 2
+            });
+            child.material = mat;
+            metalMeshes.push(mat);
+          }
+        }
+      });
+
+      setupGUI();
+      animate();
+      console.log("✅ clarity_keychain.glb loaded");
+    },
+    undefined,
+    (e) => console.error("❌ Keychain load fail:", e)
+  );
+
+  window.addEventListener("mousemove", (e) => {
+    cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
+    cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", toggleGUI);
+  window.addEventListener("click", toggleIdleRotation);
+}
+
+function applyBGScale() {
+  if (!bgMain || !bgEnv) return;
+  const heightFactor = window.innerHeight / 1080; // normalized to 1080p baseline
+  const scale = baseline.bgScale * heightFactor;
+  bgMain.scale.set(scale, scale, scale);
+  bgEnv.scale.set(scale, scale, scale);
+}
+
+function applyKeychainScale() {
+  if (!keychainController) return;
+  const heightFactor = window.innerHeight / 1080;
+  const scale = baseline.keyScale * heightFactor;
+  keychainController.scale.set(scale, scale, scale);
+}
+
+// GUI
+function setupGUI() {
+  gui = new GUI({ width: 310 });
+  gui.domElement.classList.add("root");
+
+  // lighting
+  const lightFolder = gui.addFolder("Lighting Intensity");
+  sceneMain.children.forEach((l) => {
+    if (l.isLight) {
+      lightFolder
+        .add(l, "intensity", 0, 10, 0.1)
+        .name(l.type.replace("Light", ""));
+    }
   });
 
   // keychain
-  loader.load("./asset/clarity_keychain.glb", (g) => {
-    const model = g.scene;
-    model.scale.setScalar(PARAMS.keychainScale);
-    model.position.z = PARAMS.keychainZ;
-    scene.add(model);
-    keychainController = model.getObjectByName("Keychain Controler") || model;
-
-    model.traverse((c) => {
-      if (c.isMesh) {
-        const name = c.name.toLowerCase();
-        if (name.includes("glass") || name.includes("plastik")) {
-          const glassMat = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            roughness: PARAMS.glass_roughness,
-            transmission: PARAMS.glass_transmission,
-            ior: PARAMS.glass_ior,
-            thickness: PARAMS.glass_thickness,
-            attenuationDistance: PARAMS.glass_attenuationDistance,
-            envMapIntensity: PARAMS.glass_envIntensity,
-            clearcoat: 1,
-            clearcoatRoughness: 0.05
-          });
-          c.material = glassMat;
-          glassMaterials.push(glassMat);
-        } else if (name.includes("metal") || name.includes("ring")) {
-          const metalMat = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff,
-            metalness: PARAMS.metal_metalness,
-            roughness: PARAMS.metal_roughness,
-            envMapIntensity: PARAMS.metal_envIntensity,
-            clearcoat: 1,
-            clearcoatRoughness: 0.05
-          });
-          c.material = metalMat;
-          metalMaterials.push(metalMat);
-        }
-      }
-    });
+  const keyFolder = gui.addFolder("Keychain Controls");
+  const keyParams = {
+    scale: baseline.keyScale,
+    z: baseline.keyZ,
+    moveStrength: anim.moveStrength,
+    lerpSpeed: anim.lerpSpeed,
+    rotationSpeed: anim.rotationSpeed
+  };
+  keyFolder.add(keyParams, "scale", 0.5, 6, 0.01).onChange((v) => {
+    baseline.keyScale = v;
+    applyKeychainScale();
   });
-
-  // HDRI
-  if (PARAMS.hdri) {
-    const rgbe = new RGBELoader();
-    rgbe.setPath("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/");
-    rgbe.load("studio_small_03_1k.hdr", (tex) => {
-      const envMap = pmremGenerator.fromEquirectangular(tex).texture;
-      scene.environment = envMap;
-      tex.dispose();
-    });
-  }
-
-  // Events
-  window.addEventListener("resize", onResize);
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("click", () => (PARAMS.pauseIdle = !PARAMS.pauseIdle));
-
-  createGUI();
-  onResize();
-  animate();
-}
-
-function onMouseMove(e) {
-  cursor.x = (e.clientX / window.innerWidth - 0.5) * 2;
-  cursor.y = -(e.clientY / window.innerHeight - 0.5) * 2;
-}
-function onResize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-}
-
-let gui;
-function createGUI() {
-  gui = new GUI({ width: 320 });
-
-  const fLight = gui.addFolder("Lighting");
-  fLight.add(PARAMS, "exposure", 0.3, 2, 0.01).onChange((v) => (renderer.toneMappingExposure = v));
-  fLight.add(PARAMS, "keyLight", 0, 5, 0.01).onChange((v) => (keyLight.intensity = v));
-  fLight.add(PARAMS, "fillLight", 0, 5, 0.01).onChange((v) => (fillLight.intensity = v));
-  fLight.add(PARAMS, "rimLight", 0, 5, 0.01).onChange((v) => (rimLight.intensity = v));
-  fLight.add(PARAMS, "ambientLight", 0, 2, 0.01).onChange((v) => (ambientLight.intensity = v));
-  fLight.open();
-
-  const fKC = gui.addFolder("Keychain Controls");
-  fKC.add(PARAMS, "rotationSpeed", 0, 0.05, 0.001);
-  fKC.add(PARAMS, "moveStrength", 0, 1, 0.01);
-  fKC.add(PARAMS, "lerpSpeed", 0.01, 0.2, 0.005);
-  fKC.open();
-
-  const fKT = gui.addFolder("Keychain Transform");
-  fKT.add(PARAMS, "keychainScale", 0.5, 5, 0.01).onChange((v) => {
-    if (keychainController) keychainController.scale.setScalar(v);
-  });
-  fKT.add(PARAMS, "keychainZ", -2, 3, 0.01).onChange((v) => {
+  keyFolder.add(keyParams, "z", -2, 2, 0.01).onChange((v) => {
+    baseline.keyZ = v;
     if (keychainController) keychainController.position.z = v;
   });
-  fKT.open();
+  keyFolder
+    .add(keyParams, "moveStrength", 0, 1, 0.01)
+    .onChange((v) => (anim.moveStrength = v));
+  keyFolder
+    .add(keyParams, "lerpSpeed", 0, 0.2, 0.005)
+    .onChange((v) => (anim.lerpSpeed = v));
+  keyFolder
+    .add(keyParams, "rotationSpeed", 0, 0.05, 0.001)
+    .onChange((v) => (anim.rotationSpeed = v));
 
-  const fGlass = gui.addFolder("Glass Material (Keychain)");
-  fGlass.add(PARAMS, "glass_roughness", 0, 1, 0.01).onChange((v) => glassMaterials.forEach((m) => (m.roughness = v)));
-  fGlass.add(PARAMS, "glass_ior", 1, 2, 0.01).onChange((v) => glassMaterials.forEach((m) => (m.ior = v)));
-  fGlass.add(PARAMS, "glass_thickness", 0, 1, 0.01).onChange((v) => glassMaterials.forEach((m) => (m.thickness = v)));
-  fGlass.add(PARAMS, "glass_envIntensity", 0, 4, 0.1).onChange((v) => glassMaterials.forEach((m) => (m.envMapIntensity = v)));
+  // glass
+  if (glassMeshes.length) {
+    const glassFolder = keyFolder.addFolder("Glass Material");
+    const g = glassMeshes[0];
+    glassFolder.add(g, "roughness", 0, 1, 0.01);
+    glassFolder.add(g, "ior", 1, 2, 0.01);
+    glassFolder.add(g, "thickness", 0, 1, 0.01);
+    glassFolder.add(g, "envMapIntensity", 0, 3, 0.1);
+  }
 
-  const fMetal = gui.addFolder("Metal Material (Keychain)");
-  fMetal.add(PARAMS, "metal_roughness", 0, 1, 0.01).onChange((v) => metalMaterials.forEach((m) => (m.roughness = v)));
-  fMetal.add(PARAMS, "metal_envIntensity", 0, 4, 0.1).onChange((v) => metalMaterials.forEach((m) => (m.envMapIntensity = v)));
+  // metal
+  if (metalMeshes.length) {
+    const metalFolder = keyFolder.addFolder("Metal Material");
+    const m = metalMeshes[0];
+    metalFolder.add(m, "roughness", 0, 1, 0.01);
+    metalFolder.add(m, "envMapIntensity", 0, 3, 0.1);
+  }
 
-  const fBG = gui.addFolder("Background Controls");
-  fBG.add(PARAMS, "bgScale", 0.5, 10, 0.01).onChange((v) => bgMain && bgMain.scale.setScalar(v));
-  fBG.add(PARAMS, "bgZ", -10, 2, 0.01).onChange((v) => bgMain && (bgMain.position.z = v));
-  fBG.open();
+  // bg
+  const bgFolder = gui.addFolder("Background Controls");
+  const bgParams = { scale: baseline.bgScale, z: baseline.bgZ };
+  bgFolder.add(bgParams, "scale", 0.5, 8, 0.1).onChange((v) => {
+    baseline.bgScale = v;
+    applyBGScale();
+  });
+  bgFolder.add(bgParams, "z", -5, 2, 0.1).onChange((v) => {
+    baseline.bgZ = v;
+    if (bgMain && bgEnv) {
+      bgMain.position.z = v;
+      bgEnv.position.z = v;
+    }
+  });
 }
 
+// toggle gui
+function toggleGUI(e) {
+  if (e.key.toLowerCase() === "h" && gui) {
+    guiVisible = !guiVisible;
+    gui.domElement.style.display = guiVisible ? "block" : "none";
+  }
+}
+
+// click toggle idle rotation
+function toggleIdleRotation() {
+  isIdlePaused = !isIdlePaused;
+}
+
+// resize
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  applyBGScale();
+  applyKeychainScale();
+}
+
+// loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (keychainController) {
-    if (!PARAMS.pauseIdle) {
-      idleRot += PARAMS.rotationSpeed;
-      keychainController.rotation.y = idleRot;
-      keychainController.rotation.x = 1;
-      keychainController.rotation.z = 0.6;
-    }
+    if (!isIdlePaused) idleRotation += anim.rotationSpeed;
+    keychainController.rotation.y = idleRotation;
+    keychainController.rotation.x = 1;
+    keychainController.rotation.z = 0.6;
 
-    const targetX = cursor.x * PARAMS.moveStrength;
-    const targetY = cursor.y * PARAMS.moveStrength;
-    keychainController.position.x += (targetX - keychainController.position.x) * PARAMS.lerpSpeed;
-    keychainController.position.y += (targetY - keychainController.position.y) * PARAMS.lerpSpeed;
+    const tx = cursor.x * anim.moveStrength;
+    const ty = cursor.y * anim.moveStrength;
+    keychainController.position.x += (tx - keychainController.position.x) * anim.lerpSpeed;
+    keychainController.position.y += (ty - keychainController.position.y) * anim.lerpSpeed;
+
+    keychainController.visible = false;
+    cubeCam.update(renderer, sceneEnv);
+    keychainController.visible = true;
   }
 
-  renderer.render(scene, camera);
+  renderer.render(sceneMain, camera);
 }
 
 init();
