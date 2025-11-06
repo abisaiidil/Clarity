@@ -1,30 +1,30 @@
-// main.js — Update 80 (shared glass + GUI controls for transmission/attenuation)
+// main.js — Update 80.1 (fix shader + use shared glass defaults that show up)
+// Imports come from importmap in index.html
 import * as THREE from "three";
 import { GLTFLoader } from "GLTFLoader";
 import { RectAreaLightUniformsLib } from "RectAreaLightUniformsLib";
 import GUI from "lil-gui";
 
-/* ========= SETUP RENDERER & SCENE ========= */
+/* ========= RENDERER & SCENE ========= */
 const canvas = document.getElementById("webgl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // modern color space + tone mapping (r155+)
-renderer.useLegacyLights = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.2; // sedikit boost default
 renderer.shadowMap.enabled = false;
 
 const sceneMain = new THREE.Scene();
 sceneMain.background = new THREE.Color(0xffffff);
-const sceneEnv = new THREE.Scene(); // used for cube camera capture
+const sceneEnv = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 3);
 
-/* ========= CUBECAMERA (static update once) ========= */
+/* ========= CUBE CAMERA (static one-time capture) ========= */
 const CUBE_RES = 512;
 const cubeTarget = new THREE.WebGLCubeRenderTarget(CUBE_RES, {
   format: THREE.RGBAFormat,
@@ -55,52 +55,37 @@ sceneMain.add(rimLight, rimLight.target);
 const hemi = new THREE.HemisphereLight(0xf6f6ff, 0xf2e9dc, 0.8);
 sceneMain.add(hemi);
 
-// add clones into sceneEnv (for cube capture)
+// add clones to env scene so cube capture sees similar lighting
 sceneEnv.add(keyLight.clone(), frontRect.clone(), rimLight.clone(), hemi.clone());
 
-/* ========= SHARED GLASS MATERIAL ========= */
-/* We'll build a single shared material used by:
-   - keychain 'plastik' meshes
-   - all cube glass meshes (child name includes 'glass')
+/* ========= SHARED GLASS MATERIAL (NO onBeforeCompile) ========= */
+/* Updated defaults so glass is visible on white background
+   - transmission < 1 so cube shape remains visible
+   - thicker thickness + attenuation to see form
 */
-let sharedGlassMat = new THREE.MeshPhysicalMaterial({
+const sharedGlassMat = new THREE.MeshPhysicalMaterial({
   color: 0xffffff,
-  roughness: 0.12,         // default a little frosty; tweak via GUI
+  roughness: 0.15,
   metalness: 0,
-  transmission: 0.98,
-  ior: 1.4,
-  thickness: 0.05,
+  transmission: 0.95,
+  ior: 1.45,
+  thickness: 0.2,
   envMap: cubeTarget.texture,
-  envMapIntensity: 1.8,
+  envMapIntensity: 2.0,
   clearcoat: 1,
-  clearcoatRoughness: 0.06,
+  clearcoatRoughness: 0.05,
   side: THREE.DoubleSide,
   transparent: true,
   opacity: 1.0,
-  // attenuation — modern PBR parameters supported in recent Three.js
-  attenuationDistance: 0.6,
+  attenuationDistance: 1.2,
   attenuationColor: new THREE.Color(0xffffff)
 });
-
-// subtle Fresnel highlight to reduce black rim
-sharedGlassMat.onBeforeCompile = (shader) => {
-  shader.uniforms.uFresnelBoost = { value: 0.55 };
-  shader.fragmentShader = shader.fragmentShader.replace(
-    '#include <dithering_fragment>',
-    `#include <dithering_fragment>
-    float fresnel = pow(1.0 - dot(normalize(vNormal), normalize(vViewPosition)), 2.0);
-    vec3 fresnelTint = mix(vec3(1.0), vec3(1.03,1.03,1.03), fresnel * uFresnelBoost);
-    gl_FragColor.rgb *= fresnelTint;
-    `
-  );
-};
 
 /* ========= LOADER & ASSET LIST ========= */
 const loader = new GLTFLoader();
 
 let keychainController = null;
-const icons = []; // will hold { name, root, float, mats }
-
+const icons = [];
 const iconList = [
   { name: "keys", path: "./asset/1_keys.glb", pos:{x:0.12,y:0.01,z:0.3}, amp:0.05, spd:0.9, color:"#A888B5" },
   { name: "locker", path: "./asset/5_locker.glb", pos:{x:0.12,y:0.19,z:0.3}, amp:0.08, spd:1.1, color:"#FF7BCA" },
@@ -112,7 +97,7 @@ const iconList = [
 
 let bgLoaded=false, keychainLoaded=false, iconsLoaded=0;
 
-/* ========= BACKGROUND ========= */
+/* ========= LOAD BACKGROUND ========= */
 loader.load("./asset/clarity_bg.glb",
   (g) => {
     const bg = g.scene;
@@ -129,10 +114,10 @@ loader.load("./asset/clarity_bg.glb",
     tryUpdateCube();
   },
   undefined,
-  (err) => console.error("bg load error", err)
+  (err) => console.error("bg load err", err)
 );
 
-/* ========= KEYCHAIN ========= */
+/* ========= LOAD KEYCHAIN ========= */
 loader.load("./asset/clarity_keychain.glb",
   (g) => {
     const model = g.scene;
@@ -140,7 +125,7 @@ loader.load("./asset/clarity_keychain.glb",
       if (c.isMesh) {
         const lname = (c.name || "").toLowerCase();
         if (lname.includes("plastik") || lname.includes("plast")) {
-          // USE GLOBAL sharedGlassMat (NO .clone)
+          // use sharedGlassMat (the same instance)
           c.material = sharedGlassMat;
         } else if (lname.includes("besi") || lname.includes("metal")) {
           c.material = new THREE.MeshPhysicalMaterial({
@@ -162,10 +147,10 @@ loader.load("./asset/clarity_keychain.glb",
     tryUpdateCube();
   },
   undefined,
-  (err) => console.error("keychain load error", err)
+  (err) => console.error("keychain load err", err)
 );
 
-/* ========= ICONS ========= */
+/* ========= LOAD ICONS ========= */
 function loadIcon(ic) {
   return new Promise((resolve) => {
     loader.load(ic.path, (g) => {
@@ -185,7 +170,6 @@ function loadIcon(ic) {
         if (c.isMesh) {
           const n = (c.name || "").toLowerCase();
           if (n.includes("glass")) {
-            // use global sharedGlassMat
             c.material = sharedGlassMat;
             c.material.side = THREE.DoubleSide;
             c.material.transparent = true;
@@ -220,26 +204,20 @@ Promise.all(iconList.map(i => loadIcon(i))).then(() => {
 function tryUpdateCube() {
   if (!bgLoaded || !keychainLoaded || iconsLoaded !== iconList.length) return;
 
-  // hide keychain so cube capture doesn't capture self too strong
   if (keychainController) keychainController.visible = false;
 
-  // clone main children into env scene for capture (light clones were added earlier)
-  // remove previously added clones to avoid duplicates
-  // easier: clear sceneEnv children except lights and cubeCam, then add bg & icons clones
-  // For simplicity, we add clones of bg & icons
+  // Create temp group of clones (bg already in sceneEnv)
   const tempGroup = new THREE.Group();
   sceneMain.children.forEach(ch => {
-    // add groups (bg, icons) to tempGroup except camera & lights
+    // clone groups/meshes that are not lights or camera
     if (ch.type === "Group" || ch.type === "Mesh") {
       tempGroup.add(ch.clone());
     }
   });
-
   sceneEnv.add(tempGroup);
 
   cubeCam.update(renderer, sceneEnv);
 
-  // remove tempGroup after capture
   sceneEnv.remove(tempGroup);
 
   if (keychainController) keychainController.visible = true;
@@ -249,7 +227,7 @@ function tryUpdateCube() {
 let gui = null;
 function buildGUI() {
   gui = new GUI({ width: 340 });
-  gui.domElement.style.display = "none"; // hidden default
+  gui.domElement.style.display = "none";
 
   // Lighting
   const lf = gui.addFolder("Lighting (intensity)");
@@ -259,7 +237,7 @@ function buildGUI() {
   lf.add(hemi, "intensity", 0, 3, 0.01).name("Hemisphere");
   lf.add(renderer, "toneMappingExposure", 0.2, 2, 0.01).name("Exposure");
 
-  // Keychain control
+  // Keychain
   const kf = gui.addFolder("Keychain");
   const keyParams = {
     rotationSpeed: 0.01,
@@ -267,14 +245,14 @@ function buildGUI() {
     lerpSpeed: 0.05,
     playIdle: true
   };
-  kf.add(keyParams, "rotationSpeed", 0.001, 0.03, 0.001).name("Rotation Speed").onChange(v => keyParams.rotationSpeed = v);
-  kf.add(keyParams, "moveStrength", 0.01, 0.5, 0.01).name("Follow Strength").onChange(v => keyParams.moveStrength = v);
-  kf.add(keyParams, "lerpSpeed", 0.01, 0.12, 0.005).name("Lerp Speed").onChange(v => keyParams.lerpSpeed = v);
+  kf.add(keyParams, "rotationSpeed", 0.001, 0.03, 0.001).name("Rotation Speed");
+  kf.add(keyParams, "moveStrength", 0.01, 0.5, 0.01).name("Follow Strength");
+  kf.add(keyParams, "lerpSpeed", 0.01, 0.12, 0.005).name("Lerp Speed");
   kf.add(keyParams, "playIdle").name("Idle Rotation");
 
-  // Shared glass controls
+  // Shared glass GUI
   const gm = gui.addFolder("Shared Glass (Keychain & Cubes)");
-  gm.add(sharedGlassMat, "transmission", 0, 1, 0.01).name("Transmission").onChange(v => sharedGlassMat.transmission = v);
+  gm.add(sharedGlassMat, "transmission", 0, 1, 0.01).name("Transmission");
   gm.add(sharedGlassMat, "opacity", 0.15, 1, 0.01).name("Opacity").onChange(v => {
     sharedGlassMat.opacity = v;
     sharedGlassMat.transparent = (v < 1.0) || (sharedGlassMat.transmission < 1.0);
@@ -283,15 +261,13 @@ function buildGUI() {
   gm.add(sharedGlassMat, "thickness", 0, 1, 0.01).name("Thickness");
   gm.add(sharedGlassMat, "ior", 1.0, 2.0, 0.01).name("IOR");
   gm.add(sharedGlassMat, "envMapIntensity", 0, 3, 0.05).name("Env Intensity");
-  // attenuationDistance & attenuationColor
   gm.add(sharedGlassMat, "attenuationDistance", 0, 3, 0.01).name("AttenuationDist");
-  // color needs special setter
   const attColor = { color: `#${sharedGlassMat.attenuationColor.getHexString()}` };
   gm.addColor(attColor, "color").name("AttenuationColor").onChange((val) => {
     sharedGlassMat.attenuationColor = new THREE.Color(val);
   });
 
-  // Icons group (position / float / material)
+  // Icons GUI
   icons.forEach((ic) => {
     const f = gui.addFolder(ic.name.toUpperCase());
     const posF = f.addFolder("Position");
@@ -307,15 +283,19 @@ function buildGUI() {
     matF.add(ic.mats.iconMat, "metalness", 0, 1, 0.01).name("Metalness");
   });
 
-  // toggle gui with H
+  // toggle GUI with H
   window.addEventListener("keydown", (e) => {
     if (e.key.toLowerCase() === "h") {
       gui.domElement.style.display = gui.domElement.style.display === "none" ? "block" : "none";
     }
   });
 
-  // store the key params globally for loop
-  window._CLARITY_KEY_PARAMS = keyParams;
+  window._CLARITY_KEY_PARAMS = {
+    rotationSpeed: 0.01,
+    moveStrength: 0.15,
+    lerpSpeed: 0.05,
+    playIdle: true
+  };
 }
 
 setTimeout(() => buildGUI(), 800);
@@ -327,7 +307,7 @@ window.addEventListener("mousemove", (e) => {
   pointer.y = -(e.clientY / window.innerHeight - 0.5) * 2;
 });
 
-/* ========= ANIMATE ========= */
+/* ========= ANIMATION ========= */
 let lastTime = performance.now();
 function animate() {
   requestAnimationFrame(animate);
@@ -335,11 +315,10 @@ function animate() {
   const dt = (now - lastTime) * 0.001;
   lastTime = now;
 
-  // keychain: rotation + follow
+  const kp = window._CLARITY_KEY_PARAMS || { rotationSpeed: 0.01, moveStrength: 0.15, lerpSpeed: 0.05, playIdle: true };
+
   if (keychainController) {
-    const kp = window._CLARITY_KEY_PARAMS || { rotationSpeed: 0.01, moveStrength: 0.15, lerpSpeed: 0.05, playIdle: true };
     if (kp.playIdle) keychainController.rotation.y += kp.rotationSpeed;
-    // fixed x/z rotations for style
     keychainController.rotation.x = 1;
     keychainController.rotation.z = 0.6;
 
@@ -349,7 +328,6 @@ function animate() {
     keychainController.position.y += (targetY - keychainController.position.y) * kp.lerpSpeed;
   }
 
-  // icons float
   const t = performance.now() * 0.001;
   icons.forEach((ic, i) => {
     const phase = i * 0.73;
