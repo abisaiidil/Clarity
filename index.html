@@ -1,28 +1,28 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clarity — Update 82</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clarity Hero 3D – Update 83</title>
   <style>
-    html,body {margin:0;height:100%;background:#fff;overflow:hidden}
-    #webgl {display:block;width:100%;height:100vh}
+    html,body {margin:0;padding:0;overflow:hidden;background:#ffffff;}
+    #webgl {position:fixed;top:0;left:0;width:100%;height:100%;}
   </style>
 </head>
 <body>
   <canvas id="webgl"></canvas>
-
   <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
-      "GLTFLoader": "https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js",
-      "RectAreaLightUniformsLib": "https://unpkg.com/three@0.155.0/examples/jsm/lights/RectAreaLightUniformsLib.js",
-      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+        "GLTFLoader": "https://unpkg.com/three@0.159.0/examples/jsm/loaders/GLTFLoader.js",
+        "RGBELoader": "https://unpkg.com/three@0.159.0/examples/jsm/loaders/RGBELoader.js",
+        "RectAreaLightHelper": "https://unpkg.com/three@0.159.0/examples/jsm/helpers/RectAreaLightHelper.js",
+        "RectAreaLightUniformsLib": "https://unpkg.com/three@0.159.0/examples/jsm/lights/RectAreaLightUniformsLib.js",
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
+      }
     }
-  }
   </script>
-
-  <script type="module" src="./main.js?v=82"></script>
+  <script type="module" src="./main.js?v=83"></script>
 </body>
 </html>
